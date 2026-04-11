@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-12
+> Last updated: 2026-04-12 | Phase 1 Sprint 1.1: COMPLETE ✅ | Next: Sprint 1.2 — Database Schema
 
 ---
 
@@ -108,6 +108,7 @@ career_profiles: id, user_id, current_role, target_roles[], industries[],
 **Companies & Contacts**
 ```
 companies: id, name, domain, industry, size_range, location, 
+           linkedin_url,                         ← ADDED: required for Proxycurl lookups
            enrichment_json, last_enriched_at
 contacts: id, company_id, name, title, linkedin_url, email,
           enrichment_json (Proxycurl), last_enriched_at
@@ -117,7 +118,9 @@ contacts: id, company_id, name, title, linkedin_url, email,
 ```
 signals: id, user_id, company_id, type (enum), source, title, 
          description, raw_data_json, signal_date, 
-         relevance_score float, processed_at, embedding vector[1536]
+         relevance_score float, processed_at, embedding vector[1536],
+         is_duplicate bool DEFAULT false,           ← ADDED: dedup flag for debugging
+         dedup_hash text UNIQUE                     ← ADDED: hash(source+url+date)
          
 signal_types: FUNDING | EXEC_HIRE | EXPANSION | LAYOFF | 
               JOB_POSTING_PATTERN | MA | CONTRACT | EARNINGS
@@ -129,6 +132,7 @@ opportunities: id, user_id, company_id, predicted_role,
                confidence (HIGH/MEDIUM/SPECULATIVE),
                timeline_weeks int, why_fit text, 
                positioning_notes text, predicted_salary_range,
+               fit_score float,                    ← ADDED: Career Fit Scorer output (0–100)
                key_contact_id, signal_ids[], 
                status (PREDICTED/APPROACHED/INTERVIEWING/CLOSED),
                created_at, updated_at
@@ -146,7 +150,23 @@ actions: id, user_id, opportunity_id, company_id, contact_id,
 ```
 outreach_emails: id, user_id, action_id, contact_id,
                  subject, body, tone, draft_json,
-                 sent_at, gmail_message_id, opened_at, replied_at
+                 sent_at, gmail_message_id, opened_at, replied_at,
+                 reply_detected_at                 ← ADDED: for tracking response time metrics
+```
+
+**Agent Runs** (audit trail for all AI agent invocations — REQUIRED)
+```
+agent_runs: id, user_id, agent_name, model_used,
+            input_hash text,                       ← SHA-256 of prompt input
+            output_hash text,                      ← SHA-256 of agent output
+            tokens_in int, tokens_out int,
+            cost_usd float,                        ← calculated at write time
+            duration_ms int,
+            status (SUCCESS | FAILED | RETRIED),
+            error_message text,                    ← nullable, populated on FAILED
+            created_at
+            
+-- Used for: cost tracking, debugging, prompt versioning, audit, rollback
 ```
 
 ---
@@ -154,25 +174,84 @@ outreach_emails: id, user_id, action_id, contact_id,
 ## 5. Agent Architecture
 
 ### Agent Types
-| Agent | Model | Responsibility |
-|-------|-------|----------------|
-| Signal Classifier | Claude Haiku | Classify raw signals into types, score relevance (fast, cheap) |
-| Opportunity Predictor | Claude Sonnet | Analyze signals → predict hiring needs + timeline |
-| Career Fit Scorer | Claude Sonnet | Score how well user's profile fits a predicted opportunity |
-| Positioning Advisor | Claude Sonnet | Generate positioning narrative for user → company |
-| Contact Identifier | Claude Sonnet | Identify best contact to approach at a company |
-| Email Drafter | Claude Sonnet | Draft personalized outreach emails |
-| Action Generator | Claude Sonnet | Convert opportunities → prioritized action items |
+| Agent | Model | Responsibility | File |
+|-------|-------|----------------|------|
+| Signal Classifier | Claude Haiku | Classify raw signals into types, score relevance (fast, cheap) | `agents/signal_classifier.py` |
+| Opportunity Predictor | Claude Sonnet | Analyze signals → predict hiring needs + timeline + ideal contact type | `agents/opportunity_predictor.py` |
+| Career Fit Scorer | Claude Sonnet | Score how well user's profile fits a predicted opportunity (0–100) | `agents/career_fit_scorer.py` |
+| Positioning Advisor | Claude Sonnet | Generate positioning narrative for user → company | `agents/positioning_advisor.py` |
+| Email Drafter | Claude Sonnet | Draft personalized outreach emails (3 tone variants) | `agents/email_drafter.py` |
+| Action Generator | Claude Haiku | Convert opportunities → prioritized action items | `agents/action_generator.py` |
 
-### Agent Orchestration Pattern
+> **Note:** `Contact Identifier` was merged into `Opportunity Predictor`. The predictor now outputs
+> both the predicted role AND the ideal contact title/search query. This avoids a redundant agent
+> hop and reflects the tight coupling between these two outputs.
+
+### Agent Registry
+All agents are registered in `backend/app/agents/registry.py` — a single manifest dict:
+```python
+AGENT_REGISTRY = {
+    "signal_classifier":    {"model": "claude-haiku-4-5-20251001",  "version": "1.0", "prompt_file": "prompts/signal_classifier_v1.txt"},
+    "opportunity_predictor":{"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/opportunity_predictor_v1.txt"},
+    "career_fit_scorer":    {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/career_fit_scorer_v1.txt"},
+    "positioning_advisor":  {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/positioning_advisor_v1.txt"},
+    "email_drafter":        {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/email_drafter_v1.txt"},
+    "action_generator":     {"model": "claude-haiku-4-5-20251001",  "version": "1.0", "prompt_file": "prompts/action_generator_v1.txt"},
+}
 ```
-Signal Ingestion (Celery) 
-  → Signal Classifier (Haiku) — classify + score
-  → Opportunity Predictor (Sonnet) — predict roles
-  → Career Fit Scorer (Sonnet) — score user fit
-  → Action Generator (Sonnet) — create actions
-  → Email Drafter (Sonnet) — draft outreach [on demand]
+Use `AGENT_REGISTRY` as the single source of model/version truth — never hardcode model names elsewhere.
+
+### Agent Orchestration Flow (Approved)
 ```
+Signal Ingestion (Celery Worker)
+  → [Orchestrator: create agent_run record, assign run_id]
+  │
+  ├─ Signal Classifier (Haiku)
+  │    classify type + score relevance + generate embedding
+  │    [GATE: relevance_score < 0.4 → stop, mark signal as low-relevance]
+  │
+  ├─ Opportunity Predictor (Sonnet)
+  │    input: company signals + user career profile
+  │    output: predicted_role, confidence, timeline_weeks, 
+  │            why_fit, positioning_notes, ideal_contact_title
+  │
+  ├─ [PARALLEL — both triggered by Opportunity Predictor output]
+  │   ├─ Career Fit Scorer (Sonnet)
+  │   │    input: opportunity + user profile embedding
+  │   │    output: fit_score (0–100), fit_explanation, skill_gaps
+  │   │
+  │   └─ Positioning Advisor (Sonnet)
+  │        input: user profile + opportunity + company signals
+  │        output: positioning_narrative, key_talking_points, approach_angle
+  │
+  ├─ [JOIN: wait for Career Fit Scorer + Positioning Advisor]
+  │
+  ├─ Action Generator (Haiku)
+  │    input: opportunity + fit_score + contacts
+  │    output: ActionItem[] with title, type, priority, due_date
+  │    priority = urgency × confidence × fit_score
+  │
+  └─ [Orchestrator: update agent_run status = SUCCESS]
+
+On Demand (user clicks "Draft Email"):
+  └─ Email Drafter (Sonnet)
+       input: action + contact + opportunity + user_profile
+       output: 3 variants (Professional / Warm / Direct)
+       each variant: subject, body, key_points_used
+```
+
+### Base Agent Class
+All agents extend `backend/app/agents/base_agent.py`:
+- Automatic retry (3x with exponential backoff on API errors)
+- `agent_runs` table write on every invocation (input_hash, output_hash, cost, duration)
+- Prompt caching enabled on system prompts (saves ~80% cost on repeated calls)
+- Structured output validation via Pydantic before returning
+
+### Mock Mode (Development)
+All agents check `settings.MOCK_AGENTS` (env var `MOCK_AGENTS=true`).  
+When true: return fixture data from `backend/app/agents/fixtures/` — no Claude API calls.  
+This allows full pipeline testing without API keys.  
+Mock fixtures live in `backend/app/agents/fixtures/{agent_name}_mock_output.json`.
 
 ---
 
@@ -219,25 +298,58 @@ Speculative: "bg-muted text-muted-foreground border-border"
 
 ### Base URL: `/api/v1/`
 
+#### Core Resources
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/signals` | List signals (paginated, filterable) |
-| GET | `/signals/{id}` | Signal detail |
-| POST | `/signals/ingest` | Trigger manual signal ingest |
-| GET | `/opportunities` | List predicted opportunities |
-| GET | `/opportunities/{id}` | Opportunity detail |
-| POST | `/opportunities/{id}/refresh` | Re-score with latest signals |
-| GET | `/actions` | List actions (filterable by status/priority) |
-| PUT | `/actions/{id}` | Update action status |
-| POST | `/actions/{id}/draft-email` | Generate email draft for action |
-| GET | `/outreach` | List outreach emails |
+| GET | `/health` | Service health check — returns 200 + version |
+| GET | `/signals` | List signals (paginated, filterable by type/company/date) |
+| GET | `/signals/{id}` | Signal detail + linked opportunities |
+| POST | `/signals/ingest` | Trigger manual signal ingest → returns `{run_id}` |
+| GET | `/opportunities` | List predicted opportunities (filter: confidence/status/company) |
+| GET | `/opportunities/{id}` | Opportunity detail with signals + actions |
+| POST | `/opportunities/{id}/refresh` | Re-score with latest signals → returns `{run_id}` |
+| GET | `/actions` | List actions (filterable by status/priority/type) |
+| PUT | `/actions/{id}` | Update action status/priority/due_date |
+| POST | `/actions/{id}/draft-email` | Generate email draft → returns `{run_id}` |
+| GET | `/outreach` | List outreach emails (filter: status=draft/sent/replied) |
+| POST | `/outreach/draft` | Generate new email draft (contact + action) |
 | POST | `/outreach/{id}/send` | Send via Gmail |
+| POST | `/outreach/oauth/connect` | Start Gmail OAuth flow → returns redirect URL |
+| GET | `/outreach/oauth/callback` | Complete Gmail OAuth (redirect target) |
 | GET | `/profile` | Get career profile |
 | PUT | `/profile` | Update career profile |
-| POST | `/profile/analyze` | Trigger profile re-analysis |
-| GET | `/companies/{id}` | Company detail + signals |
-| GET | `/analytics/dashboard` | Dashboard stats |
-| POST | `/auth/login` | Supabase auth |
+| POST | `/profile/analyze` | Trigger profile re-analysis → returns `{run_id}` |
+| GET | `/companies/{id}` | Company detail + signals + opportunities |
+| GET | `/contacts` | User's saved contacts |
+| POST | `/contacts/search` | Search Proxycurl by company + title keywords |
+| GET | `/contacts/{id}` | Contact detail |
+
+#### Agent & Pipeline
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/agents/run-status/{run_id}` | Poll pipeline run status → `{status, progress, result_id}` |
+| GET | `/agents/runs` | List recent agent runs (cost dashboard) |
+
+#### Analytics & Auth
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/analytics/dashboard` | Dashboard stats (signals/week, new opps, actions done) |
+| GET | `/analytics/costs` | Agent cost summary by agent_name + date range |
+| POST | `/auth/login` | Supabase auth (email + password) |
+| POST | `/auth/refresh` | Refresh JWT token |
+
+### Async Response Pattern
+Any endpoint that enqueues a Celery task returns immediately with:
+```json
+{ "run_id": "uuid", "status": "queued", "message": "Processing started" }
+```
+Frontend polls `GET /agents/run-status/{run_id}` until `status = SUCCESS | FAILED`.  
+Alternatively, Supabase Realtime can be used to subscribe to table updates directly.
+
+### Mock Data Pattern (Development)
+All endpoints check `settings.USE_MOCK_DATA` (env var `USE_MOCK_DATA=true`).  
+When true: return data from `backend/app/api/mock_responses/` — no DB or AI calls.  
+This allows full frontend development without Supabase or API keys configured.
 
 ---
 
@@ -326,7 +438,54 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 
 ---
 
-## 11. Key Decisions Log
+## 11. Post-Build Dependencies (Resolve After v1.0 Complete)
+
+> These are known gaps, unresolved dependencies, and deferred work items that are intentionally
+> excluded from v1.0 scope. Resolve before v1.5 or production launch.
+
+### API Keys Required (Placeholders In Place)
+| Service | Used For | Where Configured | Status |
+|---------|---------|-----------------|--------|
+| `ANTHROPIC_API_KEY` | All AI agents | `.env` + `settings.py` | ⏳ Pending |
+| `OPENAI_API_KEY` | Embeddings (`text-embedding-3-small`) | `.env` + `settings.py` | ⏳ Pending |
+| `NEWS_API_KEY` | Signal ingestion — news source | `.env` + `integrations/newsapi_client.py` | ⏳ Pending |
+| `CRUNCHBASE_API_KEY` | Signal ingestion — funding rounds | `.env` + `integrations/crunchbase_client.py` | ⏳ Pending |
+| `DEALROOM_API_KEY` | Signal ingestion — EU funding | `.env` + `integrations/dealroom_client.py` | ⏳ Pending |
+| `PROXYCURL_API_KEY` | Contact enrichment | `.env` + `integrations/proxycurl_client.py` | ⏳ Pending |
+| `GMAIL_CLIENT_ID` | Email OAuth | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
+| `GMAIL_CLIENT_SECRET` | Email OAuth | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
+| Supabase project URL + keys | Database + Auth | `.env` | ⏳ Pending |
+
+> **Dev approach:** All integrations built with `USE_MOCK_DATA=true` and `MOCK_AGENTS=true`.
+> When real keys are provided, flip both flags to `false` — no code changes needed.
+
+### Deferred Technical Work
+| Item | Reason Deferred | Target Version |
+|------|----------------|----------------|
+| Supabase Realtime push (instead of polling) | Polling is simpler for v1.0 | v1.5 |
+| Rate limiting middleware (100 req/min/user) | Single user in v1.0 | v1.5 |
+| Full analytics page (funnels, response rate charts) | Needs historical data to be useful | v1.5 |
+| Agent prompt A/B testing framework | Overkill for single user | v2.0 |
+| Celery Flower monitoring dashboard | Nice-to-have ops tooling | v1.5 |
+| Multi-user RLS policy audit | Architecture is cohort-ready but untested at scale | v1.5 |
+| Proxycurl rate limit queue (dedicated priority lane) | Low volume in v1.0 | v1.5 |
+| SEC EDGAR full-text 8-K parsing | Regex-based extraction good enough for v1.0 | v1.5 |
+| Dealroom integration | EU-focused, lower priority; NewsAPI covers initial needs | v1.5 |
+| Email open/reply tracking (Gmail webhook) | Polling-based check sufficient for v1.0 | v1.5 |
+| Production deployment (cloud hosting) | Docker local is sufficient for single user | v1.5 |
+| Adversarial testing / red team (prompt injection) | Critical for multi-user; defer until v1.5 | v1.5 |
+| PII redaction in agent memory/logs | Required for multi-user compliance | v1.5 |
+
+### Known Technical Debt (Acceptable for v1.0)
+- `USE_MOCK_DATA` flag is a dev shortcut — clean up mock routes before v1.5
+- `signal_ids[]` on opportunities is a denormalized array — move to join table `opportunity_signals` in v1.5
+- No structured logging format yet — add OpenTelemetry spans in v1.5
+- No API versioning strategy beyond `/v1/` — define `/v2/` migration plan before v1.5
+- `preferences_json` on users table is a grab-bag — normalize into proper columns in v1.5
+
+---
+
+## 12. Key Decisions Log
 
 | Date | Decision | Reason |
 |------|----------|--------|
@@ -337,6 +496,15 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-11 | Claude Haiku for classification | 10x cheaper, fast enough for signal labeling |
 | 2026-04-11 | Next.js App Router | Server components for fast initial load |
 | 2026-04-12 | Loveable FE as design reference | Index.tsx is the design baseline for all FE work |
+| 2026-04-12 | Supabase Auth from day one (not hardcoded user) | Cohort-ready requirement; retrofitting auth is painful |
+| 2026-04-12 | Both manual + cron signal ingestion | Manual for dev/testing; 4h cron for production |
+| 2026-04-12 | Email: draft + confirm step (not auto-send) | User must approve before any send; safer product |
+| 2026-04-12 | Analytics: dashboard stats only for v1.0 | Full funnels need historical data; defer to v1.5 |
+| 2026-04-12 | Contact Identifier merged into Opportunity Predictor | Tightly coupled outputs; separate agent was unnecessary hop |
+| 2026-04-12 | Career Fit Scorer + Positioning Advisor run in parallel | Both depend on Opportunity Predictor; neither depends on each other |
+| 2026-04-12 | Mock mode via env flags (MOCK_AGENTS, USE_MOCK_DATA) | Full dev/test without API keys; flip flags when keys available |
+| 2026-04-12 | agent_runs table for all AI invocations | Audit trail, cost tracking, debugging, prompt version rollback |
+| 2026-04-12 | Signal source priority: NewsAPI + RSS + SEC EDGAR first | Free/low-cost; covers funding/exec/expansion signals adequately for v1.0 |
 
 ---
 

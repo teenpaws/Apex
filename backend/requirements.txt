@@ -1,0 +1,47 @@
+# Apex Platform — Python backend dependencies
+# Tested on Python 3.14.3 (Windows 11)
+#
+# NOTE on Python 3.14 compatibility:
+#   asyncpg and pydantic-core require prebuilt wheels that may not exist for
+#   Python 3.14 at time of writing. If you hit build errors for these packages,
+#   either use Python 3.12 in a venv, or wait for wheel availability.
+#   All other packages install cleanly on 3.14.
+#
+# Install:
+#   pip install -r requirements.txt
+
+# ── Web framework ──────────────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# ── Database ───────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.36
+asyncpg==0.30.0          # requires prebuilt wheel; may fail on Python 3.14
+supabase==2.10.0         # pins httpx<0.28 — see httpx line below
+
+# ── Validation / Settings ──────────────────────────────────────────────────────
+pydantic[email]==2.10.3
+pydantic-settings==2.7.0
+
+# ── AI / LLM ──────────────────────────────────────────────────────────────────
+anthropic==0.40.0
+openai==1.58.1
+
+# ── Task queue ────────────────────────────────────────────────────────────────
+celery[redis]==5.4.0
+
+# ── HTTP client — pinned to satisfy supabase<0.28 constraint ──────────────────
+httpx==0.27.2
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# ── Config ────────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+anyio[trio]==4.7.0

@@ -1,7 +1,7 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-12 | Current Phase: **Phase 0 — Architecture Review & Approval**
+> Last updated: 2026-04-12 | Current Phase: **Phase 1 — Project Foundation**
 
 ---
 
@@ -53,41 +53,94 @@ mkdir -p frontend/{components/{ui,layout,signals,opportunities,actions,shared},l
 
 **Goal:** Lock in architecture before writing a single line of code. Get explicit approval on data models, API design, and agent orchestration flow.
 
-**Status:** 🔄 IN PROGRESS
+**Status:** ✅ COMPLETE — Approved 2026-04-12
 
 ### 0.1 Architecture Approval Checklist
 
-- [ ] **Data model review** — Review all tables in CLAUDE.md Section 4. Confirm field names, types, relationships.
-- [ ] **API design review** — Review all endpoints in CLAUDE.md Section 7. Confirm naming, methods, response shapes.
-- [ ] **Agent orchestration review** — Review agent types in CLAUDE.md Section 5. Confirm model choices (Sonnet vs Haiku).
-- [ ] **Signal sources review** — Review sources in CLAUDE.md Section 14. Confirm which APIs you have access to.
-- [ ] **Frontend page scope review** — Review pages in CLAUDE.md Section 6. Confirm all 8 pages are in scope for v1.0.
-- [ ] **Tech stack final confirmation** — Review CLAUDE.md Section 2. Any changes before we start?
-- [ ] **Environment variables** — Do you have API keys for: Anthropic, OpenAI, Proxycurl, NewsAPI, Crunchbase, Gmail?
-- [ ] **Supabase project** — Is a Supabase project created? Do you have the connection strings?
+- [x] **Data model review** — All tables confirmed. Added: `agent_runs`, `fit_score` on opportunities, `linkedin_url` on companies, `is_duplicate`/`dedup_hash` on signals, `reply_detected_at` on outreach_emails.
+- [x] **API design review** — Endpoints confirmed. Added: `GET /agents/run-status/{run_id}`, `GET /agents/runs`, `GET /analytics/costs`, `POST /contacts/search`, `GET /contacts/{id}`, `GET /health`, `POST /auth/refresh`, Gmail OAuth endpoints.
+- [x] **Agent orchestration review** — 6-agent design confirmed. Contact Identifier merged into Opportunity Predictor. Career Fit Scorer + Positioning Advisor run in parallel. Mock mode via `MOCK_AGENTS=true`.
+- [x] **Signal sources review** — Priority for v1.0: NewsAPI + RSS Feeds + SEC EDGAR (free/low-cost). Crunchbase + Proxycurl + Dealroom when API keys available.
+- [x] **Frontend page scope review** — All 8 pages confirmed in scope for v1.0.
+- [x] **Tech stack final confirmation** — Stack confirmed, no changes.
+- [x] **Environment variables** — API keys to be provided later. All integrations built with mock mode (`USE_MOCK_DATA=true`, `MOCK_AGENTS=true`) until keys are available.
+- [x] **Supabase project** — Connection strings to be provided later. DB schema and migrations built in Phase 1; applied when credentials available.
 
-### 0.2 Decisions to Make Before Phase 1
+### 0.2 Decisions — LOCKED
 
-1. **Auth scope for v1.0** — Single hardcoded user (simplest) OR Supabase Auth with login page?
-   - Recommendation: Supabase Auth from day one (cohort-ready requirement)
-   
-2. **Signal ingestion trigger for v1.0** — Manual (button click) OR automatic (Celery cron)?
-   - Recommendation: Both — cron runs every 4 hours, manual button for testing
-   
-3. **Email automation for v1.0** — Draft only (user sends manually) OR auto-send?
-   - Recommendation: Draft + confirm step (user approves before send)
-
-4. **Analytics scope for v1.0** — Full analytics page OR basic dashboard stats?
-   - Recommendation: Dashboard stats only for v1.0, full analytics in v1.5
+| # | Decision | Resolution |
+|---|----------|-----------|
+| 1 | Auth scope | **Supabase Auth from day one** — cohort-ready; no hardcoded user |
+| 2 | Signal ingestion trigger | **Both** — 4h cron (prod) + manual button (testing) |
+| 3 | Email automation | **Draft + explicit confirm step** — user approves before any send |
+| 4 | Analytics scope | **Dashboard stats only for v1.0** — full analytics page in v1.5 |
 
 ### 0.3 Architecture Approval Sign-Off
 
-> **APPROVAL REQUIRED BEFORE PHASE 1 STARTS**
+> **APPROVED ✅**
 > 
-> When you've reviewed and approved the architecture, add your confirmation here:
+> **Approved by:** Swapneet &nbsp;&nbsp;&nbsp; **Date:** 2026-04-12
 > 
-> **Approved by:** _________________________ **Date:** _____________
-> **Notes/Changes:**
+> **Changes from original design:**
+> - `agent_runs` table added (audit + cost tracking)
+> - `fit_score` field added to `opportunities`
+> - `linkedin_url` added to `companies`
+> - `Contact Identifier` agent merged into `Opportunity Predictor`
+> - `Career Fit Scorer` + `Positioning Advisor` now run in parallel
+> - Mock mode added (`MOCK_AGENTS`, `USE_MOCK_DATA` env flags)
+> - `run_id` return pattern for all async endpoints
+> - Signal source priority: NewsAPI + RSS + SEC EDGAR first
+> - All API keys deferred — dev proceeds with mock data
+
+---
+
+## Detailed Architecture Reference
+
+> Quick reference for developers. Full details in CLAUDE.md.
+
+### Agent Pipeline (Final)
+```
+Signal Ingestion
+  → Signal Classifier (Haiku) [GATE: relevance ≥ 0.4]
+  → Opportunity Predictor (Sonnet) [outputs role + contact type]
+  → [PARALLEL] Career Fit Scorer (Sonnet) + Positioning Advisor (Sonnet)
+  → [JOIN]
+  → Action Generator (Haiku)
+  → agent_runs updated to SUCCESS
+
+On demand: Email Drafter (Sonnet) → 3 tone variants
+```
+
+### Data Model Additions (vs. original)
+```
+companies        + linkedin_url
+signals          + is_duplicate, dedup_hash
+opportunities    + fit_score
+outreach_emails  + reply_detected_at
+agent_runs       NEW TABLE (full audit trail)
+```
+
+### Mock Development Strategy
+```bash
+# .env for development (no real API keys needed)
+MOCK_AGENTS=true        # Agents return fixture JSON, no Claude calls
+USE_MOCK_DATA=true      # API endpoints return mock_responses/, no DB calls
+
+# When real keys available:
+MOCK_AGENTS=false
+USE_MOCK_DATA=false
+# Zero code changes required
+```
+
+### Signal Source Priority (v1.0)
+| Priority | Source | Reason |
+|----------|--------|--------|
+| 1 | RSS Feeds | Free, hourly, company-controlled content |
+| 2 | NewsAPI | Free tier (100/day), real-time news |
+| 3 | SEC EDGAR | Free public API, exec changes + contracts |
+| 4 | Crunchbase | Funding data (needs key — add when available) |
+| 5 | Proxycurl | Contact enrichment (needs key — add when available) |
+| 6 | Dealroom | EU funding (lowest priority for v1.0) |
 
 ---
 
@@ -95,44 +148,60 @@ mkdir -p frontend/{components/{ui,layout,signals,opportunities,actions,shared},l
 
 **Goal:** Working repo with scaffolded BE + FE, Supabase schema deployed, Docker dev environment running.
 
-**Status:** ⏳ PENDING (awaiting Phase 0 approval)
+**Status:** 🟡 IN PROGRESS — Sprint 1.1 COMPLETE ✅ | Sprint 1.2 starts next session
 
 **Superpowers Skills:** `/writing-plans` → `/dispatching-parallel-agents` (BE + FE + QA)
 
-### Sprint 1.1 — Repository & Infrastructure (Session 1)
+### Sprint 1.1 — Repository & Infrastructure (Session 1) ✅ COMPLETE
 
 **Agent: BE Infrastructure Agent (1 agent)**
 
 #### Tasks
-- [ ] Initialize Python project with `pyproject.toml` (Poetry)
-- [ ] Install: `fastapi`, `uvicorn[standard]`, `sqlalchemy`, `asyncpg`, `supabase`, `pydantic[email]`, `anthropic`, `openai`, `celery[redis]`, `httpx`, `python-jose`, `passlib`
-- [ ] Create `backend/app/core/config.py` — Settings class using Pydantic BaseSettings, reads from `.env`
-- [ ] Create `docker-compose.yml` with: FastAPI, Redis, Celery worker
-- [ ] Create `.env.example` with all required vars (see CLAUDE.md Section 8)
-- [ ] Create `backend/Dockerfile`
-- [ ] Verify: `docker-compose up` starts without errors
+- [x] Initialize Python project — used `pip + requirements.txt` (Poetry not available; Python 3.14.3)
+- [x] Install: `fastapi`, `uvicorn[standard]`, `pydantic[email]`, `anthropic`, `httpx`, `python-jose`, `passlib` + test deps
+- [x] Create `backend/app/core/config.py` — Settings class using Pydantic BaseSettings, reads from `.env`
+- [x] Create `.env.example` with all required vars + `MOCK_AGENTS=true`, `USE_MOCK_DATA=true`
+- [x] Create `backend/app/main.py` — FastAPI app with CORS, health router, `create_app()` factory
+- [x] Create `backend/app/core/security.py` — JWT verify + Bearer extraction
+- [x] Create `backend/app/core/dependencies.py` — `get_current_user()` with mock passthrough
+- [x] Create `backend/app/api/v1/health.py` — `GET /api/v1/health`
+- [x] Create `backend/app/agents/registry.py` — AGENT_REGISTRY (6 agents)
+- [x] Create `backend/app/agents/base_agent.py` — BaseAgent ABC with retry + audit stub
+- [x] Create all 6 agent fixture JSONs + 6 prompt stub files
+- [x] All `__init__.py` files for every module
+- [ ] ~~docker-compose.yml~~ — Docker not available on this machine; deferred
+- [ ] ~~Dockerfile~~ — deferred with Docker
+
+> **Note:** Docker not available on dev machine. `docker-compose.yml` and `Dockerfile` deferred.
+> Dev server: `cd backend && uvicorn app.main:app --reload`
 
 **Agent: FE Infrastructure Agent (1 agent)**
 
 #### Tasks
-- [ ] Initialize Next.js 14 project: `npx create-next-app@latest frontend --typescript --tailwind --app`
-- [ ] Install: `shadcn/ui`, `lucide-react`, `@supabase/supabase-js`, `@tanstack/react-query`, `axios`, `recharts`
-- [ ] Initialize shadcn/ui: `npx shadcn-ui@latest init`
-- [ ] Install shadcn components: `card`, `badge`, `progress`, `button`, `input`, `dialog`, `sheet`, `tabs`, `select`, `separator`
-- [ ] Migrate `Index.tsx` → `frontend/app/(dashboard)/page.tsx` (adapt to Next.js app router)
-- [ ] Create `frontend/components/layout/DashboardLayout.tsx` (sidebar nav to all 8 pages)
-- [ ] Create `frontend/lib/mock/index.ts` — all mock data from Loveable design
-- [ ] Verify: `npm run dev` shows dashboard with mock data
+- [x] Initialize Next.js 16.2.3 project with TypeScript + Tailwind + App Router
+- [x] Install: `shadcn/ui`, `lucide-react`, `@supabase/supabase-js`, `@tanstack/react-query`, `axios`, `recharts`
+- [x] Initialize shadcn/ui; install: `card`, `badge`, `progress`, `button`, `input`, `dialog`, `sheet`, `tabs`, `select`, `separator`
+- [x] Migrate `Index.tsx` → `frontend/app/(dashboard)/page.tsx` (Next.js app router, Next.js Link)
+- [x] Create `frontend/components/layout/DashboardLayout.tsx` — dark sidebar, 8-page nav, active state
+- [x] Create `frontend/components/shared/PipelineViz.tsx` — pipeline stage overview
+- [x] Create `frontend/lib/mock/index.ts` — full mock data (signals, opportunities, actions, companies, contacts, stats)
+- [x] Create `frontend/types/index.ts` — full TypeScript interfaces for all models
+- [x] Create `frontend/lib/api.ts` — axios client with auth interceptor
+- [x] Create `frontend/app/(dashboard)/layout.tsx` — wraps DashboardLayout
+- [x] Create stub pages: signals, opportunities, actions, outreach, profile, analytics, settings
+- [x] Verify: `npm run build` compiles clean — all 11 routes static ✅
 
 **Agent: QA Infrastructure Agent (1 agent)**
 
 #### Tasks
-- [ ] Set up pytest with `pytest-asyncio`, `httpx`, `pytest-cov`
-- [ ] Set up Vitest + React Testing Library in frontend
-- [ ] Set up Playwright for E2E (`npx playwright install`)
-- [ ] Create `backend/tests/conftest.py` — test client, test DB fixtures
-- [ ] Write smoke test: GET `/api/v1/health` returns 200
-- [ ] Write FE smoke test: Dashboard renders without crashing
+- [x] Set up pytest with `pytest-asyncio`, `httpx`, `pytest-cov`
+- [x] Set up Vitest + React Testing Library + `@testing-library/jest-dom` in frontend
+- [x] Set up Playwright for E2E — chromium downloaded
+- [x] Create `backend/tests/conftest.py` — async test client, mock user fixture
+- [x] Create `backend/pytest.ini` — asyncio auto mode, coverage config
+- [x] Write smoke tests: `GET /api/v1/health` → 200 ✅ (5/5 passing)
+- [x] Write FE smoke test placeholder in `frontend/__tests__/dashboard.test.tsx`
+- [x] Create `frontend/playwright.config.ts` + `frontend/e2e/dashboard.spec.ts`
 
 ### Sprint 1.2 — Database Schema (Session 2)
 
@@ -744,8 +813,8 @@ curl http://localhost:8000/api/v1/signals
 
 | Phase | Status | Sessions Used | Notes |
 |-------|--------|--------------|-------|
-| 0 | 🔄 In Progress | 0/1 | Need architecture approval |
-| 1 | ⏳ Pending | 0/3 | |
+| 0 | ✅ Complete | 1/1 | Architecture approved 2026-04-12 |
+| 1 | 🔄 In Progress | 0/3 | |
 | 2 | ⏳ Pending | 0/4 | |
 | 3 | ⏳ Pending | 0/4 | |
 | 4 | ⏳ Pending | 0/5 | |

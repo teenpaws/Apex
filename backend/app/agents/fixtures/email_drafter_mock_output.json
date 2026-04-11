@@ -1,0 +1,22 @@
+{
+  "variants": [
+    {
+      "tone": "Professional",
+      "subject": "Strategic opportunity at [Company]",
+      "body": "Dear [Name],\n\nI came across [Company]'s recent funding news...",
+      "key_points_used": ["Series B funding", "Growth trajectory"]
+    },
+    {
+      "tone": "Warm",
+      "subject": "Congrats on the funding — quick question",
+      "body": "Hi [Name],\n\nJust saw the news about [Company]'s Series B...",
+      "key_points_used": ["Funding milestone", "Shared connection"]
+    },
+    {
+      "tone": "Direct",
+      "subject": "Strategy role at [Company]",
+      "body": "[Name],\n\nYour recent funding suggests you're scaling fast...",
+      "key_points_used": ["Funding", "Growth signal"]
+    }
+  ]
+}

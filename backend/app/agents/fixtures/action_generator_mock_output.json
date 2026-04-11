@@ -1,0 +1,22 @@
+{
+  "actions": [
+    {
+      "title": "Research VP Strategy role at [Company]",
+      "type": "RESEARCH",
+      "priority": "HIGH",
+      "due_date": "+3d"
+    },
+    {
+      "title": "Draft outreach to Chief of Staff",
+      "type": "OUTREACH",
+      "priority": "HIGH",
+      "due_date": "+5d"
+    },
+    {
+      "title": "Connect on LinkedIn",
+      "type": "FOLLOW_UP",
+      "priority": "MEDIUM",
+      "due_date": "+7d"
+    }
+  ]
+}
