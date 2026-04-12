@@ -1,0 +1,46 @@
+{
+  "actions": [
+    {
+      "id": "act-0001-0000-0000-000000000001",
+      "user_id": "mock-user-id",
+      "opportunity_id": "opp-0001-0000-0000-000000000001",
+      "company_id": "co-00000-0000-0000-000000000001",
+      "title": "Reach out to Accenture Strategy hiring manager",
+      "description": "Send personalised intro email referencing the Series D and AI practice expansion.",
+      "type": "OUTREACH",
+      "priority": "HIGH",
+      "status": "TODO",
+      "due_date": "2026-04-17T09:00:00Z",
+      "created_at": "2026-04-10T10:05:00Z"
+    },
+    {
+      "id": "act-0002-0000-0000-000000000002",
+      "user_id": "mock-user-id",
+      "opportunity_id": "opp-0002-0000-0000-000000000002",
+      "company_id": "co-00000-0000-0000-000000000002",
+      "title": "Research McKinsey CDO and digital practice",
+      "description": "Map the new CDO's background and identify overlapping experience to reference.",
+      "type": "RESEARCH",
+      "priority": "MEDIUM",
+      "status": "IN_PROGRESS",
+      "due_date": "2026-04-15T09:00:00Z",
+      "created_at": "2026-04-09T15:05:00Z"
+    },
+    {
+      "id": "act-0003-0000-0000-000000000003",
+      "user_id": "mock-user-id",
+      "opportunity_id": "opp-0001-0000-0000-000000000001",
+      "company_id": "co-00000-0000-0000-000000000001",
+      "title": "Follow up with Accenture contact",
+      "description": "Send follow-up if no response within 5 business days.",
+      "type": "FOLLOW_UP",
+      "priority": "MEDIUM",
+      "status": "TODO",
+      "due_date": "2026-04-22T09:00:00Z",
+      "created_at": "2026-04-10T10:06:00Z"
+    }
+  ],
+  "total": 3,
+  "page": 1,
+  "page_size": 20
+}
