@@ -83,12 +83,18 @@ class SignalCreate(BaseModel):
 
 
 class SignalRead(BaseModel):
-    """Response schema for reading a signal."""
+    """Response schema for reading a signal.
+
+    ID fields use `str` rather than `uuid.UUID` so that human-readable mock
+    IDs (e.g. ``sig-0001-…``) are accepted in development/test mode without
+    Pydantic validation errors.  The live DB will always return proper UUID
+    strings, which are also valid `str` values.
+    """
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
-    user_id: uuid.UUID
-    company_id: uuid.UUID | None
+    id: str
+    user_id: str
+    company_id: str | None
     type: SignalType
     source: str | None
     title: str | None
