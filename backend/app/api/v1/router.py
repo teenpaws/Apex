@@ -9,6 +9,11 @@ from fastapi import APIRouter
 
 from app.api.v1.health import router as health_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.signals import router as signals_router
+from app.api.v1.companies import router as companies_router
+from app.api.v1.opportunities import router as opportunities_router
+from app.api.v1.actions import router as actions_router
+from app.api.v1.profile import router as profile_router
 
 router = APIRouter()
 
@@ -17,14 +22,14 @@ router.include_router(health_router)
 
 # ── Phase 2: Auth + Core APIs ──────────────────────────────────────────────────
 router.include_router(auth_router)
+router.include_router(signals_router)
+router.include_router(companies_router)
+router.include_router(opportunities_router)
+router.include_router(actions_router)
+router.include_router(profile_router)
 
-# ── Phase 2+: Feature routers (uncomment as implemented) ──────────────────────
-# TODO: include signals router       (Phase 2)
-# TODO: include opportunities router (Phase 2)
-# TODO: include actions router       (Phase 2)
-# TODO: include profile router       (Phase 2)
+# ── Phase 3+: Remaining routers ───────────────────────────────────────────────
 # TODO: include outreach router      (Phase 3)
-# TODO: include companies router     (Phase 2)
 # TODO: include contacts router      (Phase 3)
 # TODO: include agents router        (Phase 2)
 # TODO: include analytics router     (Phase 4)
