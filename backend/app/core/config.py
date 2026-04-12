@@ -25,11 +25,14 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = "placeholder-anthropic-key"
     OPENAI_API_KEY: str = "placeholder-openai-key"
 
-    # ── External Data APIs ────────────────────────────────────────────────────
-    PROXYCURL_API_KEY: str = "placeholder-proxycurl-key"
-    NEWS_API_KEY: str = "placeholder-newsapi-key"
-    CRUNCHBASE_API_KEY: str = "placeholder-crunchbase-key"
-    DEALROOM_API_KEY: str = "placeholder-dealroom-key"
+    # ── Signal Sources (free tier — see CLAUDE.md Section 14) ────────────────
+    NEWSDATA_API_KEY: str = "placeholder-newsdata-key"   # newsdata.io — 200 req/day free
+    GNEWS_API_KEY: str = "placeholder-gnews-key"         # gnews.io — 100 req/day free (backup)
+    # SEC EDGAR: no key needed — data.sec.gov is fully public
+
+    # ── Contact Intelligence (PDL replaces Proxycurl, shut down July 2025) ───
+    PDL_API_KEY: str = "placeholder-pdl-key"             # peopledatalabs.com — 1k free/mo
+    HUNTER_API_KEY: str = "placeholder-hunter-key"       # hunter.io — 25 free/mo (email finding)
 
     # ── Redis / Celery ────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"

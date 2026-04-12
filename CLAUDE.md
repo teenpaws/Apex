@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-12 | Phase 1 Sprint 1.2: COMPLETE ✅ | Next: Phase 2 — Core Backend APIs
+> Last updated: 2026-04-12 | Phase 2: COMPLETE ✅ | API Stack Audit: COMPLETE ✅ | Next: Phase 3 — Signal Intelligence Engine
 
 ---
 
@@ -36,9 +36,10 @@ Apex is a multi-agent AI platform that gives job seekers — starting with MBA g
 | AI Classifier | Claude Haiku (`claude-haiku-4-5-20251001`) | Signal classification, fast ops |
 | Embeddings | OpenAI `text-embedding-3-small` | 1536-dim vectors |
 | Frontend | Next.js 14 + Tailwind CSS | App router, shadcn/ui components |
-| People/Company Data | Proxycurl API | Contact enrichment |
+| People/Company Data | People Data Labs (PDL) API | Contact enrichment — 1k free/mo, legally clean |
+| Email Finding | Hunter.io | Email discovery by domain — 25 free/mo |
 | Email Automation | Gmail API (OAuth 2.0) | Outreach automation |
-| Signal Sources | NewsAPI, Crunchbase API, RSS feeds, SEC EDGAR, Dealroom | Market intelligence |
+| Signal Sources | NewsData.io, GNews API, RSS feeds, SEC EDGAR (data.sec.gov) | Market intelligence |
 | Auth | Supabase Auth (JWT) | Row-level security from day one |
 | Deployment | Docker + Docker Compose | Dev; production TBD |
 
@@ -363,10 +364,11 @@ SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ANTHROPIC_API_KEY=...
 OPENAI_API_KEY=...
-PROXYCURL_API_KEY=...
-NEWS_API_KEY=...
-CRUNCHBASE_API_KEY=...
-DEALROOM_API_KEY=...
+NEWSDATA_API_KEY=...         # newsdata.io — free 200 req/day, commercial OK
+GNEWS_API_KEY=...            # gnews.io — free 100 req/day, backup news source
+PDL_API_KEY=...              # peopledatalabs.com — free 1k credits/month
+HUNTER_API_KEY=...           # hunter.io — free 25 searches/month (email finding)
+# SEC EDGAR: NO KEY NEEDED — data.sec.gov is fully public, no auth required
 REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/1
 GMAIL_CLIENT_ID=...
@@ -444,20 +446,34 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 > excluded from v1.0 scope. Resolve before v1.5 or production launch.
 
 ### API Keys Required (Placeholders In Place)
-| Service | Used For | Where Configured | Status |
-|---------|---------|-----------------|--------|
-| `ANTHROPIC_API_KEY` | All AI agents | `.env` + `settings.py` | ⏳ Pending |
-| `OPENAI_API_KEY` | Embeddings (`text-embedding-3-small`) | `.env` + `settings.py` | ⏳ Pending |
-| `NEWS_API_KEY` | Signal ingestion — news source | `.env` + `integrations/newsapi_client.py` | ⏳ Pending |
-| `CRUNCHBASE_API_KEY` | Signal ingestion — funding rounds | `.env` + `integrations/crunchbase_client.py` | ⏳ Pending |
-| `DEALROOM_API_KEY` | Signal ingestion — EU funding | `.env` + `integrations/dealroom_client.py` | ⏳ Pending |
-| `PROXYCURL_API_KEY` | Contact enrichment | `.env` + `integrations/proxycurl_client.py` | ⏳ Pending |
-| `GMAIL_CLIENT_ID` | Email OAuth | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
-| `GMAIL_CLIENT_SECRET` | Email OAuth | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
-| Supabase project URL + keys | Database + Auth | `.env` | ⏳ Pending |
+| Service               | Used For                    | Where Configured                     | Status      |
+|-----------------------|-----------------------------|--------------------------------------|-------------|
+| `ANTHROPIC_API_KEY`   | All AI agents               | `.env` + `settings.py`               | ⏳ Pending  |
+| `OPENAI_API_KEY`      | Embeddings (`text-embedding-3-small`) | `.env` + `settings.py`     | ⏳ Pending  |
+| `NEWSDATA_API_KEY`    | Signal ingestion — primary news | `.env` + `integrations/newsdata_client.py` | ⏳ Pending |
+| `GNEWS_API_KEY`       | Signal ingestion — backup news | `.env` + `integrations/gnews_client.py` | ⏳ Pending |
+| `PDL_API_KEY`         | Contact enrichment (replaces Proxycurl) | `.env` + `integrations/pdl_client.py` | ⏳ Pending |
+| `HUNTER_API_KEY`      | Email finding by domain     | `.env` + `integrations/hunter_client.py` | ⏳ Pending |
+| `GMAIL_CLIENT_ID`     | Email OAuth                 | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
+| `GMAIL_CLIENT_SECRET` | Email OAuth                 | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
+| Supabase project URL + keys | Database + Auth        | `.env`                               | ⏳ Pending  |
+
+> **Removed (no longer in project):**
+> - `PROXYCURL_API_KEY` — Proxycurl shut down July 2025 after LinkedIn lawsuit. Replaced by PDL.
+> - `CRUNCHBASE_API_KEY` — Enterprise only (~$15k+/year). Replaced by SEC EDGAR Form D (free).
+> - `DEALROOM_API_KEY` — €6k+/year minimum. Dropped for v1.0; EU signals covered by NewsData.io RSS.
+> - `NEWS_API_KEY` (newsapi.org) — Free tier is localhost-only, cannot deploy. Replaced by NewsData.io.
 
 > **Dev approach:** All integrations built with `USE_MOCK_DATA=true` and `MOCK_AGENTS=true`.
 > When real keys are provided, flip both flags to `false` — no code changes needed.
+
+> **Free API signups needed (all zero cost, no credit card required):**
+> - NewsData.io: https://newsdata.io/register
+> - GNews API: https://gnews.io/register
+> - People Data Labs: https://dashboard.peopledatalabs.com/signup
+> - Hunter.io: https://hunter.io/users/sign_up
+> - SEC EDGAR: NO SIGNUP — https://data.sec.gov (public API)
+> - Supabase: https://supabase.com (free project)
 
 ### Deferred Technical Work
 | Item | Reason Deferred | Target Version |
@@ -468,9 +484,9 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | Agent prompt A/B testing framework | Overkill for single user | v2.0 |
 | Celery Flower monitoring dashboard | Nice-to-have ops tooling | v1.5 |
 | Multi-user RLS policy audit | Architecture is cohort-ready but untested at scale | v1.5 |
-| Proxycurl rate limit queue (dedicated priority lane) | Low volume in v1.0 | v1.5 |
+| PDL rate limit queue (dedicated priority lane) | Low volume in v1.0 | v1.5 |
 | SEC EDGAR full-text 8-K parsing | Regex-based extraction good enough for v1.0 | v1.5 |
-| Dealroom integration | EU-focused, lower priority; NewsAPI covers initial needs | v1.5 |
+| Dealroom integration | Dropped for v1.0 (€6k+/yr); EU signals via NewsData.io + RSS | v2.0 |
 | Email open/reply tracking (Gmail webhook) | Polling-based check sufficient for v1.0 | v1.5 |
 | Production deployment (cloud hosting) | Docker local is sufficient for single user | v1.5 |
 | Adversarial testing / red team (prompt injection) | Critical for multi-user; defer until v1.5 | v1.5 |
@@ -505,6 +521,11 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-12 | Mock mode via env flags (MOCK_AGENTS, USE_MOCK_DATA) | Full dev/test without API keys; flip flags when keys available |
 | 2026-04-12 | agent_runs table for all AI invocations | Audit trail, cost tracking, debugging, prompt version rollback |
 | 2026-04-12 | Signal source priority: NewsAPI + RSS + SEC EDGAR first | Free/low-cost; covers funding/exec/expansion signals adequately for v1.0 |
+| 2026-04-12 | Proxycurl removed from stack | Proxycurl shut down July 2025 (LinkedIn federal lawsuit). Replaced with PDL (People Data Labs) — 1k free credits/month, legally clean, public data sources only. |
+| 2026-04-12 | Crunchbase API removed | Enterprise-only pricing (~$15k+/year). SEC EDGAR Form D filings cover the same US private funding data for free. EU funding covered by NewsData.io. |
+| 2026-04-12 | NewsAPI.org replaced | Free tier is localhost-only and cannot be deployed. Replaced with NewsData.io (200/day free, commercial use OK, no delay). |
+| 2026-04-12 | Dealroom dropped for v1.0 | €6k+/year. EU funding rounds announced in press — NewsData.io + RSS captures these adequately. Can revisit for v2.0. |
+| 2026-04-12 | Hunter.io added | Email discovery by company domain + first/last name. 25 free/month covers personal-scale outreach well. |
 
 ---
 
@@ -578,14 +599,14 @@ git push origin phase/{N}-{short-name}
 
 ## 14. Signal Sources Reference
 
-| Source | Type | Update Frequency | What We Extract |
-|--------|------|-----------------|----------------|
-| NewsAPI | REST API | Real-time | Funding, M&A, expansion news |
-| Crunchbase | REST API | Daily | Funding rounds, investor data, headcount |
-| RSS Feeds | RSS/Atom | Hourly | Company blogs, press releases |
-| SEC EDGAR | REST API | Daily | 8-K filings, major contracts, exec changes |
-| Dealroom | REST API | Daily | European startup funding, investors |
-| LinkedIn (via Proxycurl) | REST API | On-demand | Contact enrichment, job postings |
+| Source           | Type     | Update Frequency | What We Extract                                                      | Cost         | Key Required |
+|------------------|----------|-----------------|-----------------------------------------------------------------------|--------------|--------------|
+| RSS Feeds        | RSS/Atom | Hourly          | Company blogs, press releases, expansion signals                      | Free         | No           |
+| SEC EDGAR        | REST API | Real-time       | Form D (private funding rounds — same data as Crunchbase), 8-K (exec changes, major contracts), 10-K/10-Q (earnings). US companies only. | Free | No |
+| NewsData.io      | REST API | Real-time       | Company news, funding announcements (EU/global), expansion news, leadership changes, market entry | Free 200/day | Yes (free) |
+| GNews API        | REST API | Real-time       | Backup news source, broad coverage                                    | Free 100/day | Yes (free)   |
+| PDL              | REST API | On-demand       | Contact enrichment, person + company profiles from public/open sources (replaces Proxycurl) | Free 1k/mo | Yes (free) |
+| Hunter.io        | REST API | On-demand       | Email discovery by company domain + name                              | Free 25/mo   | Yes (free)   |
 
 ---
 
@@ -596,7 +617,7 @@ git push origin phase/{N}-{short-name}
 │                     APEX PLATFORM                        │
 ├─────────────────────────────────────────────────────────┤
 │  SIGNAL LAYER                                            │
-│  NewsAPI → Crunchbase → RSS → SEC → Dealroom             │
+│  NewsData.io → GNews → RSS → SEC EDGAR (Form D, 8-K, 10-Q) → PDL (contacts) │
 │       ↓ Celery Workers (async ingestion)                 │
 │  Signal Storage (Supabase) ←→ Signal Classifier (Haiku)  │
 ├─────────────────────────────────────────────────────────┤
@@ -608,7 +629,7 @@ git push origin phase/{N}-{short-name}
 ├─────────────────────────────────────────────────────────┤
 │  DATA LAYER                                              │
 │  Supabase Postgres (pgvector) + Redis (cache/queue)      │
-│  Proxycurl → Company/Contact enrichment                  │
+│  PDL → Company/Contact enrichment (Proxycurl removed)    │
 ├─────────────────────────────────────────────────────────┤
 │  API LAYER                                               │
 │  FastAPI (async) — /api/v1/ — JWT Auth (Supabase)        │

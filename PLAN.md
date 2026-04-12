@@ -1,7 +1,7 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-12 | Current Phase: **Phase 1 — Project Foundation**
+> Last updated: 2026-04-12 | Current Phase: **Phase 3 — Signal Intelligence Engine**
 
 ---
 
@@ -10,11 +10,12 @@
 | Phase | Name | Focus | BE Agents | FE Agents | QA Agents | Est. Sessions |
 |-------|------|-------|-----------|-----------|-----------|--------------|
 | 0 | Architecture Review & Approval | Design lock-in, no code | 0 | 0 | 0 | 1 |
+| 0.5 | API Stack Audit & Remediation | Remove dead APIs, document free replacements | 0 | 0 | 0 | 1 |
 | 1 | Project Foundation | Repo, DB schema, scaffolds | 1 | 1 | 1 | 2–3 |
 | 2 | Core Backend APIs | Users, Companies, Signals CRUD | 2 | 0 | 1 | 3–4 |
 | 3 | Signal Intelligence Engine | Ingestion workers, classifiers | 2 | 0 | 1 | 3–4 |
 | 4 | AI Reasoning Layer | Opportunity prediction, fit scoring | 2 | 0 | 1 | 4–5 |
-| 5 | People Intelligence | Proxycurl enrichment, contacts | 1 | 0 | 1 | 2 |
+| 5 | People Intelligence | PDL enrichment, contacts, Hunter.io email finding | 1 | 0 | 1 | 2 |
 | 6 | Frontend — Core Pages | Dashboard, Signals, Opportunities | 0 | 2 | 1 | 4–5 |
 | 7 | Frontend — Action Pages | Actions, Outreach, Profile | 0 | 2 | 1 | 3–4 |
 | 8 | Email Automation | Gmail OAuth, drafts, sends | 1 | 1 | 1 | 2–3 |
@@ -160,11 +161,59 @@ USE_MOCK_DATA=false
 | Priority | Source | Reason |
 |----------|--------|--------|
 | 1 | RSS Feeds | Free, hourly, company-controlled content |
-| 2 | NewsAPI | Free tier (100/day), real-time news |
-| 3 | SEC EDGAR | Free public API, exec changes + contracts |
-| 4 | Crunchbase | Funding data (needs key — add when available) |
-| 5 | Proxycurl | Contact enrichment (needs key — add when available) |
-| 6 | Dealroom | EU funding (lowest priority for v1.0) |
+| 2 | SEC EDGAR | Free public API, Form D (funding) + 8-K (exec/contracts) |
+| 3 | NewsData.io | Free 200/day, commercial OK, replaces NewsAPI.org |
+| 4 | GNews API | Free 100/day, backup news source |
+| 5 | PDL | Contact enrichment, free 1k/mo (replaces Proxycurl) |
+| 6 | Hunter.io | Email finding, free 25/mo |
+
+---
+
+---
+
+## Phase 0.5: API Stack Audit & Remediation
+
+**Goal:** Remove dead/unavailable APIs from the stack before Phase 3 (Signal Intelligence) begins. Update CLAUDE.md and PLAN.md to reflect the free-tier replacement stack. No application code written in this phase — documentation and planning only.
+
+**Status:** ✅ COMPLETE — 2026-04-12
+
+**Trigger:** Pre-Phase 3 audit discovered three critical blockers in the planned API stack.
+
+### What Changed
+
+| Removed | Reason | Replacement |
+|---------|--------|-------------|
+| Proxycurl | Shut down July 2025, LinkedIn federal lawsuit | People Data Labs (PDL) — 1k free/mo |
+| Crunchbase API | Enterprise-only (~$15k+/yr) | SEC EDGAR Form D filings (free, no key) |
+| NewsAPI.org | Free tier localhost-only, unusable in prod | NewsData.io (200/day free, commercial OK) |
+| Dealroom API | €6k+/yr minimum | Dropped — EU signals via NewsData.io + RSS |
+
+### New Free-Tier Signal Stack
+
+| Priority | Source | Cost | Key |
+|----------|--------|------|-----|
+| 1 | RSS Feeds | Free | None |
+| 2 | SEC EDGAR (data.sec.gov) | Free | None |
+| 3 | NewsData.io | Free 200/day | Free signup |
+| 4 | GNews API | Free 100/day | Free signup |
+| 5 | PDL (People Data Labs) | Free 1k/mo | Free signup |
+| 6 | Hunter.io | Free 25/mo | Free signup |
+
+### Impact on Upcoming Phases
+
+**Phase 3 (Signal Intelligence Engine):** Sprint 3.1 tasks for `newsapi_client.py` and `crunchbase_client.py` must be replaced with `newsdata_client.py`, `gnews_client.py`, and `sec_edgar_client.py` (the SEC EDGAR client was already planned; now it also covers Form D funding data).
+
+**Phase 5 (People Intelligence):** `proxycurl_client.py` must be replaced with `pdl_client.py` (People Data Labs) and `hunter_client.py` (email finding). The Proxycurl-based `enrich_contacts.py` worker must be rebuilt using PDL endpoints.
+
+### Decisions Locked
+
+| # | Decision | Resolution |
+|---|----------|-----------|
+| 1 | Contact enrichment provider | PDL (People Data Labs) — free 1k/mo, public data, legally clean |
+| 2 | Funding data source | SEC EDGAR Form D (US) + NewsData.io press coverage (EU/global) |
+| 3 | Primary news API | NewsData.io — commercial-friendly free tier, no delay |
+| 4 | Dealroom | Dropped for v1.0. Revisit for v2.0 if EU coverage becomes insufficient. |
+| 5 | Proxycurl replacement | PDL for enrichment + Hunter.io for email — no LinkedIn scraping at all |
 
 ---
 
@@ -346,29 +395,39 @@ pytest tests/ -v --tb=short -k "not test_db"
 **Agent: BE Signal Ingestion Agent A (1 agent)**
 
 #### Tasks
-- [ ] `backend/app/integrations/newsapi_client.py`
-  - Fetch articles by company name + keyword
-  - Parse and normalize to signal format
-- [ ] `backend/app/integrations/crunchbase_client.py`
-  - Fetch funding rounds, acquisitions, leadership hires
-  - Parse and normalize to signal format
+- [ ] `backend/app/integrations/newsdata_client.py`
+  - Primary news source — NewsData.io REST API
+  - Fetch articles by company name + keyword + category
+  - Free tier: 200 req/day — cache aggressively (24h TTL per query)
+  - Parse and normalize to SignalEvent schema
+  - Handle rate limit gracefully: queue overflow to next day's batch
+- [ ] `backend/app/integrations/gnews_client.py`
+  - Backup news source — GNews API
+  - Activate only when NewsData.io daily quota exhausted
+  - Free tier: 100 req/day
+  - Same output schema as newsdata_client (normalize to SignalEvent)
+- [ ] `backend/app/integrations/sec_edgar_client.py` (EXTENDED SCOPE)
+  - Already planned for Tier 2 (earnings 8-K) — now ALSO covers funding signals
+  - Form D filings: private funding rounds (same data Crunchbase sources from)
+    - Endpoint: https://efts.sec.gov/LATEST/search-index?q=%22{company}%22&dateRange=custom&startdt={date}&forms=D
+    - Extract: amount raised, investors, funding stage, company name, state
+  - 8-K filings: exec changes, material contracts, major events (existing scope)
+  - 10-Q/10-K: earnings language NLP (existing Tier 2 scope)
+  - NO API KEY REQUIRED — data.sec.gov is fully public
+  - Rate limit: 10 req/sec per SEC policy — add 0.12s delay between calls
 - [ ] `backend/app/integrations/rss_client.py`
   - Configurable RSS feed list
   - Parse and normalize to signal format
 - [ ] `backend/app/workers/ingest_signals.py` (Celery tasks)
-  - `ingest_from_newsapi(user_id, company_ids)`
-  - `ingest_from_crunchbase(user_id, company_ids)`
+  - `ingest_from_newsdata(user_id, company_ids)`
+  - `ingest_from_gnews(user_id, company_ids)` (fallback only)
+  - `ingest_from_sec_edgar(user_id, company_ids)`
   - `ingest_from_rss(user_id, feed_urls)`
   - Deduplication: hash(source + url + date) before insert
 
 **Agent: BE Signal Ingestion Agent B (1 agent)**
 
 #### Tasks
-- [ ] `backend/app/integrations/sec_edgar_client.py`
-  - Fetch 8-K filings for tracked companies
-  - Parse for: exec changes, major contracts, material events
-- [ ] `backend/app/integrations/dealroom_client.py`
-  - Fetch funding rounds and investor data (EU focus)
 - [ ] `backend/app/workers/classify_signals.py` (Celery tasks)
   - `classify_signal(signal_id)` — calls Haiku to classify type + relevance
   - `batch_classify_signals(signal_ids[])` — bulk classification
@@ -487,7 +546,7 @@ curl http://localhost:8000/api/v1/signals
 
 ## Phase 5: People Intelligence
 
-**Goal:** Enrich companies and contacts via Proxycurl. User can search for key contacts at target companies.
+**Goal:** Enrich companies and contacts via People Data Labs (PDL). User can search for key contacts at target companies. Email finding via Hunter.io.
 
 **Status:** ⏳ PENDING
 
@@ -495,33 +554,46 @@ curl http://localhost:8000/api/v1/signals
 
 **Pre-requisite:** Phase 4 complete ✅
 
-### Sprint 5.1 — Proxycurl Integration (Session 11)
+### Sprint 5.1 — PDL + Hunter.io Integration (Session 11)
 
 **Agent: BE Enrichment Agent (1 agent)**
 
 #### Tasks
-- [ ] `backend/app/integrations/proxycurl_client.py`
-  - `get_company(linkedin_url)` → company profile + headcount + recent hires
-  - `get_person(linkedin_url)` → contact profile
-  - `search_people(company_name, title_keywords)` → list of contacts
-  - Rate limiting: respect Proxycurl's rate limits, queue with Celery
-  - Cache enriched data: re-enrich only if > 30 days old
-- [ ] `backend/app/workers/enrich_contacts.py`
-  - `enrich_company(company_id)` — fetch Proxycurl company data
-  - `enrich_contact(contact_id)` — fetch Proxycurl person data
-  - `find_key_contact(company_id, role_type)` — search + auto-create contact
-- [ ] `backend/app/api/v1/contacts.py`
+- [ ] `backend/app/integrations/pdl_client.py`
+  - People Data Labs REST API — replaces Proxycurl
+  - `enrich_person(name, company, linkedin_url=None)` → contact profile
+  - `enrich_company(name, domain=None)` → company profile + headcount
+  - `search_people(company_name, title_keywords)` → list of matching contacts
+  - Free tier: 1,000 credits/month — cache ALL enriched profiles (90-day TTL)
+  - Data is sourced from public/open data (no LinkedIn scraping) — legally clean
+  - Error handling: on 402 (quota exceeded) → log warning, return cached data or None
+- [ ] `backend/app/integrations/hunter_client.py`
+  - Hunter.io REST API — email finding by company domain + person name
+  - `find_email(first_name, last_name, domain)` → verified email or None
+  - `find_domain_emails(domain, limit=5)` → list of known emails at a company
+  - Free tier: 25 searches/month — use sparingly, only for high-priority contacts
+  - Cache results permanently (emails don't change often)
+- [ ] `backend/app/workers/enrich_contacts.py` (REBUILT)
+  - `enrich_company(company_id)` → calls pdl_client.enrich_company()
+  - `enrich_contact(contact_id)` → calls pdl_client.enrich_person(), then hunter_client.find_email()
+  - `find_key_contact(company_id, role_type)` → PDL search + auto-create contact record
+  - Quota-aware: track monthly PDL credit usage in agent_runs table
+  - Prioritize enrichment queue by opportunity fit_score (enrich high-fit contacts first)
+- [ ] `backend/app/api/v1/contacts.py` (unchanged interface — same endpoints)
   - `GET /contacts` — user's saved contacts
-  - `POST /contacts/search` — search Proxycurl by company + title
+  - `POST /contacts/search` — search PDL by company + title (was Proxycurl)
   - `GET /contacts/{id}` — contact detail
 
 **Agent: QA Enrichment Agent (1 agent)**
 
 #### Tasks
-- [ ] Mock Proxycurl responses (avoid API costs in tests)
-- [ ] Test enrichment: company enriched with correct fields
+- [ ] Mock PDL API responses (record/replay fixtures — avoid using credits in tests)
+- [ ] Mock Hunter.io responses (same pattern)
+- [ ] Test enrichment: company enriched with correct fields from PDL
 - [ ] Test contact search: returns ranked contacts by seniority
-- [ ] Test caching: second enrichment uses cache, not API
+- [ ] Test caching: second enrichment uses cache, not API (critical for quota)
+- [ ] Test quota tracking: agent_runs records PDL credit consumption
+- [ ] Test graceful degradation: when PDL quota exhausted, system returns cached data not error
 
 ---
 
@@ -835,8 +907,9 @@ curl http://localhost:8000/api/v1/signals
 | Phase | Status | Sessions Used | Notes |
 |-------|--------|--------------|-------|
 | 0 | ✅ Complete | 1/1 | Architecture approved 2026-04-12 |
-| 1 | 🔄 In Progress | 0/3 | |
-| 2 | ⏳ Pending | 0/4 | |
+| 0.5 | ✅ Complete | 1/1 | API stack audit complete 2026-04-12. Proxycurl/Crunchbase/Dealroom/NewsAPI.org replaced. |
+| 1 | ✅ Complete | 2/3 | Foundation + DB schema complete |
+| 2 | ✅ Complete | 2/4 | 51 tests passing |
 | 3 | ⏳ Pending | 0/4 | |
 | 4 | ⏳ Pending | 0/5 | |
 | 5 | ⏳ Pending | 0/2 | |
