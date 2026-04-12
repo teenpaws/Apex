@@ -13,6 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
+from app.core.errors import (
+    ApexHTTPException,
+    apex_exception_handler,
+    unhandled_exception_handler,
+)
 
 
 def create_app() -> FastAPI:
@@ -40,6 +45,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── Exception Handlers ─────────────────────────────────────────────────────
+    app.add_exception_handler(ApexHTTPException, apex_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     # ── Routers ────────────────────────────────────────────────────────────────
     app.include_router(v1_router, prefix="/api/v1")

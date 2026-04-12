@@ -1,0 +1,55 @@
+{
+  "signals": [
+    {
+      "id": "sig-0001-0000-0000-000000000001",
+      "user_id": "mock-user-id",
+      "company_id": "co-00000-0000-0000-000000000001",
+      "type": "FUNDING",
+      "source": "NewsAPI",
+      "title": "Accenture raises $500M Series D",
+      "description": "Enterprise consulting firm secures growth funding to expand AI practice.",
+      "raw_data_json": {},
+      "signal_date": "2026-04-10T09:00:00Z",
+      "relevance_score": 0.87,
+      "processed_at": null,
+      "is_duplicate": false,
+      "dedup_hash": null,
+      "created_at": "2026-04-10T09:05:00Z"
+    },
+    {
+      "id": "sig-0002-0000-0000-000000000002",
+      "user_id": "mock-user-id",
+      "company_id": "co-00000-0000-0000-000000000002",
+      "type": "EXEC_HIRE",
+      "source": "RSS",
+      "title": "McKinsey appoints new Chief Digital Officer",
+      "description": "Top management consultancy brings in CDO to lead digital transformation.",
+      "raw_data_json": {},
+      "signal_date": "2026-04-09T14:00:00Z",
+      "relevance_score": 0.92,
+      "processed_at": null,
+      "is_duplicate": false,
+      "dedup_hash": null,
+      "created_at": "2026-04-09T14:10:00Z"
+    },
+    {
+      "id": "sig-0003-0000-0000-000000000003",
+      "user_id": "mock-user-id",
+      "company_id": "co-00000-0000-0000-000000000003",
+      "type": "EXPANSION",
+      "source": "SEC_EDGAR",
+      "title": "BCG opens new Paris office",
+      "description": "Boston Consulting Group expands European footprint with new Paris headquarters.",
+      "raw_data_json": {},
+      "signal_date": "2026-04-08T11:00:00Z",
+      "relevance_score": 0.75,
+      "processed_at": null,
+      "is_duplicate": false,
+      "dedup_hash": null,
+      "created_at": "2026-04-08T11:15:00Z"
+    }
+  ],
+  "total": 3,
+  "page": 1,
+  "page_size": 20
+}

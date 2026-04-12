@@ -1,0 +1,9 @@
+{
+  "id": "prof-001-0000-0000-000000000001",
+  "user_id": "mock-user-id",
+  "current_role": "MBA Student",
+  "target_roles": ["Strategy Consultant", "Digital Transformation Manager", "Chief of Staff"],
+  "industries": ["Consulting", "Technology", "Financial Services"],
+  "aspirations_text": "I want to leverage my MBA from HEC Paris to transition into a strategy or digital transformation role at a top-tier consulting firm or tech company. Long-term I aspire to a COO or general management position.",
+  "updated_at": "2026-04-10T08:00:00Z"
+}

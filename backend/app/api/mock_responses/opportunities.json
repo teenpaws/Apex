@@ -1,0 +1,52 @@
+{
+  "opportunities": [
+    {
+      "id": "opp-0001-0000-0000-000000000001",
+      "user_id": "mock-user-id",
+      "company_id": "co-00000-0000-0000-000000000001",
+      "predicted_role": "Strategy Manager",
+      "confidence": "HIGH",
+      "timeline_weeks": 6,
+      "why_fit": "Your MBA + strategy background aligns with Accenture's new AI practice expansion.",
+      "positioning_notes": "Lead with digital transformation experience.",
+      "predicted_salary_range": "\u20ac120k\u2013\u20ac150k",
+      "fit_score": 87.5,
+      "signal_ids": ["sig-0001-0000-0000-000000000001"],
+      "status": "PREDICTED",
+      "created_at": "2026-04-10T10:00:00Z"
+    },
+    {
+      "id": "opp-0002-0000-0000-000000000002",
+      "user_id": "mock-user-id",
+      "company_id": "co-00000-0000-0000-000000000002",
+      "predicted_role": "Digital Transformation Consultant",
+      "confidence": "MEDIUM",
+      "timeline_weeks": 10,
+      "why_fit": "McKinsey's new CDO hire signals a push for digital talent.",
+      "positioning_notes": "Emphasise cross-functional leadership and tech fluency.",
+      "predicted_salary_range": "\u20ac100k\u2013\u20ac130k",
+      "fit_score": 72.0,
+      "signal_ids": ["sig-0002-0000-0000-000000000002"],
+      "status": "PREDICTED",
+      "created_at": "2026-04-09T15:00:00Z"
+    },
+    {
+      "id": "opp-0003-0000-0000-000000000003",
+      "user_id": "mock-user-id",
+      "company_id": "co-00000-0000-0000-000000000003",
+      "predicted_role": "Operations Consultant",
+      "confidence": "SPECULATIVE",
+      "timeline_weeks": 16,
+      "why_fit": "BCG Paris expansion may create junior-to-mid consultant openings.",
+      "positioning_notes": "Paris presence and French fluency are differentiators.",
+      "predicted_salary_range": "\u20ac90k\u2013\u20ac110k",
+      "fit_score": 61.0,
+      "signal_ids": ["sig-0003-0000-0000-000000000003"],
+      "status": "PREDICTED",
+      "created_at": "2026-04-08T12:00:00Z"
+    }
+  ],
+  "total": 3,
+  "page": 1,
+  "page_size": 20
+}
