@@ -1,6 +1,12 @@
 {
   "signal_type": "FUNDING",
-  "relevance_score": 0.85,
-  "summary": "Company raised Series B funding",
-  "is_relevant": true
+  "relevance_score": 0.87,
+  "companies_mentioned": ["Acme Corp", "Sequoia Capital"],
+  "people_mentioned": ["John Smith"],
+  "key_facts": [
+    "Raised $45M Series B",
+    "Plans to expand to EMEA market",
+    "Targeting fintech and consulting sectors"
+  ],
+  "reasoning": "Series B funding in fintech aligns with user's target industries and signals hiring in strategy and operations roles"
 }

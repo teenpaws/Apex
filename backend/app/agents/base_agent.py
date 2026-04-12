@@ -38,6 +38,9 @@ class BaseAgent(ABC):
 
     # Subclasses set this to their registry key, e.g. "signal_classifier"
     agent_name: str = ""
+    # Class-level default; overridden per-instance in __init__ from settings.
+    # Declared here so unittest.mock.patch can target it at class level.
+    _mock_mode: bool = True
 
     def __init__(self, settings: Any) -> None:
         """
@@ -180,6 +183,86 @@ class BaseAgent(ABC):
             f"Claude API call failed after {_MAX_RETRIES} attempts. "
             f"Last error: {last_exc}"
         ) from last_exc
+
+    # ── Public audit helper (preferred over _log_agent_run) ───────────────────
+
+    async def write_agent_run(
+        self,
+        *,
+        user_id: str,
+        model: str,
+        input_data: dict,
+        output_data: dict,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        cost_usd: float = 0.0,
+        duration_ms: int = 0,
+        status: str = "SUCCESS",
+        error_message: str | None = None,
+    ) -> None:
+        """
+        Public alias for _log_agent_run — preferred entry point for concrete agents.
+
+        Inserts an audit record to `agent_runs` in Supabase (or logs under mock mode).
+        The input/output are stored as SHA-256 hashes only — never raw content —
+        to keep the table lightweight and avoid storing PII.
+
+        Args:
+            user_id:       Supabase user UUID (or surrogate ID in mock/test mode).
+            model:         Model identifier used (from AGENT_REGISTRY).
+            input_data:    Raw input dict — will be hashed, not stored.
+            output_data:   Raw output dict — will be hashed, not stored.
+            tokens_in:     Input token count from the API response.
+            tokens_out:    Output token count from the API response.
+            cost_usd:      Calculated cost at write time.
+            duration_ms:   Wall-clock duration of the agent call in milliseconds.
+            status:        "SUCCESS" | "FAILED" | "RETRIED"
+            error_message: Populated when status is "FAILED".
+        """
+        await self._log_agent_run(
+            user_id=user_id,
+            model=model,
+            input_data=input_data,
+            output_data=output_data,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost_usd,
+            duration_ms=duration_ms,
+            status=status,
+            error_message=error_message,
+        )
+
+    # ── Mock fixture loader (path-based variant) ───────────────────────────────
+
+    def _get_mock_output(self, fixture_path: str) -> dict:
+        """
+        Load a mock output fixture from an explicit path.
+
+        Unlike _load_mock_fixture() (which derives path from agent_name), this
+        method accepts an explicit file path — useful when a single agent may
+        have multiple fixture variants.
+
+        Args:
+            fixture_path: Absolute or relative path to a JSON fixture file.
+                          Relative paths are resolved from the fixtures/ directory.
+
+        Returns:
+            Parsed JSON dict from the fixture file.
+
+        Raises:
+            FileNotFoundError: If the fixture file does not exist.
+        """
+        path = Path(fixture_path)
+        if not path.is_absolute():
+            path = _FIXTURES_DIR / fixture_path
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Mock fixture not found at: {path}. "
+                "Create the fixture file or set MOCK_AGENTS=false."
+            )
+        logger.debug("Loading mock fixture (explicit path): %s", path)
+        return json.loads(path.read_text(encoding="utf-8"))
 
     # ── Audit logging ──────────────────────────────────────────────────────────
 

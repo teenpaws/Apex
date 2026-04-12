@@ -1,0 +1,8 @@
+{
+  "signal_type": "FUNDING",
+  "relevance_score": 0.87,
+  "confidence": "HIGH",
+  "reasoning": "Article describes a funding round with clear hiring implications. The company is actively investing in AI capabilities and plans to expand its engineering team, making this a strong signal for potential new roles.",
+  "hiring_implication": "Likely to hire senior engineers and AI specialists within 4-8 weeks post-funding.",
+  "suggested_signal_types": ["FUNDING", "EXPANSION"]
+}
