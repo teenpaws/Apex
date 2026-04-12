@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-12 | Phase 1 Sprint 1.1: COMPLETE ✅ | Next: Sprint 1.2 — Database Schema
+> Last updated: 2026-04-12 | Phase 1 Sprint 1.2: COMPLETE ✅ | Next: Phase 2 — Core Backend APIs
 
 ---
 
@@ -508,20 +508,53 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 
 ---
 
-## 12. Day-to-Day Workflow
+## 12. Git Branching Convention
+
+Every phase lives on its own branch. No direct commits to `main`.
+
+```bash
+# Start a new phase
+git checkout main && git pull origin main
+git checkout -b phase/{N}-{short-name}
+# e.g.  phase/2-core-backend-apis
+#        phase/3-signal-intelligence
+#        phase/4-ai-reasoning-layer
+
+# Finish a phase
+git push origin phase/{N}-{short-name}
+# Open PR on GitHub → review → squash-merge → delete branch
+```
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Stable, always-deployable — merged phases only |
+| `phase/{N}-{name}` | All work for Phase N (commits, sub-branches welcome) |
+
+**Rule:** When a phase is declared complete, open a PR from `phase/{N}-{name}` → `main`, merge it, and delete the phase branch.
+
+---
+
+## 13. Day-to-Day Workflow
 
 ### Starting a Session
 1. Read this file (CLAUDE.md) first
 2. Read PLAN.md to know which phase you're in
 3. Check `git status` and `git log --oneline -10`
-4. Run `/using-superpowers` to re-load skill context
-5. Start work on the current phase
+4. If starting a new phase: `git checkout -b phase/{N}-{name}`
+5. Run `/using-superpowers` to re-load skill context
+6. Start work on the current phase
 
 ### Ending a Session
 1. Commit all work with descriptive messages
 2. Update PLAN.md — mark completed tasks ✅
 3. Note any blockers or decisions made
-4. Push to remote branch
+4. Push to the current phase branch (not main)
+
+### Finishing a Phase
+1. Ensure all tasks are ✅ in PLAN.md
+2. Run full test suite — 0 regressions
+3. Open PR: `phase/{N}-{name}` → `main` on GitHub
+4. Merge PR → delete phase branch
 
 ### When Stuck
 1. Run `/systematic-debugging` skill

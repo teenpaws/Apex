@@ -26,6 +26,30 @@
 
 ---
 
+## Git Branching Convention
+
+Every phase is developed on its own branch and merged into `main` when complete.
+
+```bash
+# Start a phase
+git checkout main && git pull origin main
+git checkout -b phase/{N}-{short-name}
+# e.g. phase/2-core-backend-apis
+
+# Finish a phase — PR merge into main
+git push origin phase/{N}-{short-name}
+# Open PR on GitHub → review → merge → delete branch
+```
+
+| Branch pattern | Used for |
+|----------------|---------|
+| `main` | Stable, always-deployable code |
+| `phase/{N}-{name}` | All work for Phase N (multiple commits OK) |
+
+**Rule:** No direct commits to `main`. Every phase lands via a PR from its phase branch.
+
+---
+
 ## Superpowers Setup (One-Time)
 
 Before starting Phase 1, complete this setup:
