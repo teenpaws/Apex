@@ -267,23 +267,25 @@ pytest tests/integration/test_db.py -v
 
 **Goal:** All CRUD endpoints for signals, opportunities, actions, profile, companies working with real Supabase data. Auth middleware working.
 
-**Status:** ⏳ PENDING
+**Status:** 🟡 IN PROGRESS — Sprint 2.1 COMPLETE ✅ | Sprint 2.2 next
 
 **Superpowers Skills:** `/writing-plans` → `/dispatching-parallel-agents` (2 BE + 1 QA) → `/test-driven-development`
 
 **Pre-requisite:** Phase 1 complete ✅
 
-### Sprint 2.1 — Auth & Base Setup (Session 3)
+### Sprint 2.1 — Auth & Base Setup (Session 3) ✅ COMPLETE
 
 **Agent: BE Auth Agent (1 agent)**
 
 #### Tasks
-- [ ] Create `backend/app/core/security.py` — JWT validation via Supabase
-- [ ] Create `backend/app/core/dependencies.py` — `get_current_user` dependency
-- [ ] Create `backend/app/api/v1/__init__.py` — Router aggregation
-- [ ] Create `backend/app/api/v1/health.py` — `GET /api/v1/health`
-- [ ] Create `backend/app/api/v1/auth.py` — Auth endpoints (login, refresh)
-- [ ] All endpoints return structured JSON errors (never raw exceptions)
+- [x] `backend/app/core/security.py` — JWT validation via Supabase (was already complete from Sprint 1.1)
+- [x] `backend/app/core/dependencies.py` — `get_current_user` with mock passthrough (was already complete from Sprint 1.1)
+- [x] `backend/app/core/errors.py` — `ErrorDetail`, `ApexHTTPException`, structured exception handlers
+- [x] `backend/app/main.py` — register both exception handlers in `create_app()`
+- [x] `backend/app/api/v1/auth.py` — `POST /auth/login` + `POST /auth/refresh` (mock + live Supabase paths)
+- [x] `backend/app/api/v1/router.py` — auth router wired in
+- [x] All endpoints return structured JSON errors via `ApexHTTPException`
+- [x] Tests: 8 auth tests + 3 error shape tests — all pass (16 total, 7 DB skipped)
 
 ### Sprint 2.2 — Core Resource APIs (Sessions 4–5)
 
