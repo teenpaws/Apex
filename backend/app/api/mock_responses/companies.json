@@ -1,0 +1,37 @@
+{
+  "companies": [
+    {
+      "id": "co-00000-0000-0000-000000000001",
+      "name": "Accenture",
+      "domain": "accenture.com",
+      "industry": "Consulting",
+      "size_range": "500000+",
+      "location": "Dublin, Ireland",
+      "linkedin_url": "https://www.linkedin.com/company/accenture",
+      "enrichment_json": {},
+      "last_enriched_at": null
+    },
+    {
+      "id": "co-00000-0000-0000-000000000002",
+      "name": "McKinsey & Company",
+      "domain": "mckinsey.com",
+      "industry": "Consulting",
+      "size_range": "30000-50000",
+      "location": "New York, USA",
+      "linkedin_url": "https://www.linkedin.com/company/mckinsey",
+      "enrichment_json": {},
+      "last_enriched_at": null
+    },
+    {
+      "id": "co-00000-0000-0000-000000000003",
+      "name": "Boston Consulting Group",
+      "domain": "bcg.com",
+      "industry": "Consulting",
+      "size_range": "30000-50000",
+      "location": "Boston, USA",
+      "linkedin_url": "https://www.linkedin.com/company/boston-consulting-group",
+      "enrichment_json": {},
+      "last_enriched_at": null
+    }
+  ]
+}
