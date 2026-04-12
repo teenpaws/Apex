@@ -1,0 +1,28 @@
+{
+  "status": "success",
+  "totalResults": 2,
+  "results": [
+    {
+      "article_id": "abc123xyz",
+      "title": "McKinsey Raises $50M to Expand AI Practice",
+      "description": "Global consultancy McKinsey announces major investment in AI capabilities, planning to hire 500 engineers over the next 18 months.",
+      "pubDate": "2026-04-10 12:00:00",
+      "source_id": "techcrunch",
+      "link": "https://techcrunch.com/2026/04/10/mckinsey-ai-expansion",
+      "language": "english",
+      "category": ["business", "technology"],
+      "keywords": ["McKinsey", "AI", "funding", "expansion"]
+    },
+    {
+      "article_id": "def456xyz",
+      "title": "McKinsey Opens New Singapore Office to Capture APAC Growth",
+      "description": "McKinsey & Company expands Asia-Pacific footprint with Singapore hub, signalling aggressive regional growth strategy.",
+      "pubDate": "2026-04-09 08:30:00",
+      "source_id": "reuters",
+      "link": "https://reuters.com/2026/04/09/mckinsey-singapore-expansion",
+      "language": "english",
+      "category": ["business"],
+      "keywords": ["McKinsey", "Singapore", "expansion", "APAC"]
+    }
+  ]
+}

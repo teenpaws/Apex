@@ -1,0 +1,27 @@
+{
+  "totalArticles": 2,
+  "articles": [
+    {
+      "title": "Bain & Company Opens New Paris Office",
+      "description": "Bain & Company expands European presence with new Paris headquarters, creating 200 new consulting roles in France.",
+      "publishedAt": "2026-04-09T10:30:00Z",
+      "url": "https://reuters.com/bain-paris-office",
+      "image": "https://reuters.com/images/bain-paris.jpg",
+      "source": {
+        "name": "Reuters",
+        "url": "https://reuters.com"
+      }
+    },
+    {
+      "title": "Bain & Company Announces Record Revenue for 2025",
+      "description": "Bain posts 22% revenue growth driven by digital transformation and private equity advisory practices.",
+      "publishedAt": "2026-04-07T14:00:00Z",
+      "url": "https://ft.com/bain-revenue-2025",
+      "image": null,
+      "source": {
+        "name": "Financial Times",
+        "url": "https://ft.com"
+      }
+    }
+  ]
+}

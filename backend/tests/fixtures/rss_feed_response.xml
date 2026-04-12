@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Corp News</title>
+    <link>https://example.com</link>
+    <description>Latest news from Test Corp</description>
+    <item>
+      <title>Test Corp Secures Series B Funding</title>
+      <link>https://example.com/news/series-b</link>
+      <description>Test Corp has raised $30M in Series B funding to accelerate product development and expand its engineering team.</description>
+      <pubDate>Fri, 10 Apr 2026 09:00:00 GMT</pubDate>
+      <guid>https://example.com/news/series-b</guid>
+    </item>
+    <item>
+      <title>Test Corp Appoints New VP of Engineering</title>
+      <link>https://example.com/news/new-vp-engineering</link>
+      <description>Test Corp announces the appointment of Jane Smith as VP of Engineering, bringing 15 years of infrastructure experience.</description>
+      <pubDate>Thu, 09 Apr 2026 14:30:00 GMT</pubDate>
+      <guid>https://example.com/news/new-vp-engineering</guid>
+    </item>
+  </channel>
+</rss>

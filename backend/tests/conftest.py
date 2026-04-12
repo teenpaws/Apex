@@ -40,3 +40,15 @@ async def async_client():
 def mock_user():
     """Mock authenticated user for testing."""
     return {"id": "mock-user-id", "email": "test@apex.ai"}
+
+
+@pytest.fixture(autouse=True)
+def celery_eager_mode(monkeypatch):
+    """
+    Run Celery tasks synchronously in tests.
+
+    Sets CELERY_TASK_ALWAYS_EAGER=true so tasks execute inline when .apply()
+    or .delay() is called — no broker required.  The flag is read by the
+    Celery app configuration in app.core.celery_app.
+    """
+    monkeypatch.setenv("CELERY_TASK_ALWAYS_EAGER", "true")

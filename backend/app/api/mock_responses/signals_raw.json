@@ -1,0 +1,90 @@
+{
+  "_comment": "Raw SignalEvent fixtures — one per source type. Used by workers in USE_MOCK_DATA=true mode to simulate ingestion without hitting live APIs.",
+  "signal_events": [
+    {
+      "source": "newsdata",
+      "external_id": "https://techcrunch.com/2026/04/11/stripe-raises-200m-series-c",
+      "title": "Stripe raises $200M Series C to expand AI payment capabilities",
+      "description": "Stripe has secured $200M in Series C funding led by Sequoia Capital, with plans to double its engineering team and expand into European markets.",
+      "raw_data": {
+        "title": "Stripe raises $200M Series C to expand AI payment capabilities",
+        "link": "https://techcrunch.com/2026/04/11/stripe-raises-200m-series-c",
+        "pubDate": "2026-04-11 10:00:00",
+        "source_id": "techcrunch",
+        "description": "Stripe secures growth capital to accelerate product development.",
+        "image_url": null
+      },
+      "signal_date": "2026-04-11T10:00:00Z",
+      "company_name": "Stripe",
+      "_inferred_signal_type": "FUNDING"
+    },
+    {
+      "source": "gnews",
+      "external_id": "https://venturebeat.com/2026/04/10/mckinsey-appoints-chief-ai-officer",
+      "title": "McKinsey appoints Dr. Sarah Chen as Chief AI Officer",
+      "description": "McKinsey & Company has named Dr. Sarah Chen as Chief AI Officer, signalling a major push into enterprise AI consulting and product development.",
+      "raw_data": {
+        "title": "McKinsey appoints Dr. Sarah Chen as Chief AI Officer",
+        "url": "https://venturebeat.com/2026/04/10/mckinsey-appoints-chief-ai-officer",
+        "publishedAt": "2026-04-10T14:00:00Z",
+        "source": {
+          "name": "VentureBeat",
+          "url": "https://venturebeat.com"
+        },
+        "description": "McKinsey executive hire signals AI expansion strategy.",
+        "_source_name": "VentureBeat"
+      },
+      "signal_date": "2026-04-10T14:00:00Z",
+      "company_name": "McKinsey",
+      "_inferred_signal_type": "EXEC_HIRE"
+    },
+    {
+      "source": "sec_edgar",
+      "external_id": "sec_d:0001234567-26-000001",
+      "title": "Accenture — Form D (Private Offering)",
+      "description": "Form D filing by Accenture Inc. Period: 2026-03-15. Accession: 0001234567-26-000001. Total offering amount: $150,000,000.",
+      "raw_data": {
+        "entity_name": "Accenture Inc.",
+        "file_date": "2026-03-20",
+        "period_of_report": "2026-03-15",
+        "accession_no": "0001234567-26-000001",
+        "form_type": "D",
+        "_signal_type": "FUNDING"
+      },
+      "signal_date": "2026-03-20T00:00:00Z",
+      "company_name": "Accenture",
+      "_inferred_signal_type": "FUNDING"
+    },
+    {
+      "source": "sec_edgar",
+      "external_id": "sec_8k:0001234567-26-000002",
+      "title": "BCG — Appointment of New Chief Executive Officer",
+      "description": "SEC 8-K filing by Boston Consulting Group. Filing date: 2026-04-05. Accession: 0001234567-26-000002.",
+      "raw_data": {
+        "entity_name": "Boston Consulting Group",
+        "file_date": "2026-04-05",
+        "accession_no": "0001234567-26-000002",
+        "form_type": "8-K",
+        "_signal_type": "EXEC_HIRE"
+      },
+      "signal_date": "2026-04-05T00:00:00Z",
+      "company_name": "BCG",
+      "_inferred_signal_type": "EXEC_HIRE"
+    },
+    {
+      "source": "rss",
+      "external_id": "https://bain.com/blog/new-york-office-expansion",
+      "title": "Bain & Company Opens New York Office to Support Rapid Growth",
+      "description": "Bain & Company today announced the opening of its flagship New York office, adding 200 positions across consulting, technology, and operations teams.",
+      "raw_data": {
+        "feed_url": "https://bain.com/blog/rss.xml",
+        "entry_id": "https://bain.com/blog/new-york-office-expansion",
+        "tags": ["expansion", "hiring", "office", "new-york"],
+        "author": "Bain Communications"
+      },
+      "signal_date": "2026-04-09T12:00:00Z",
+      "company_name": "Bain & Company",
+      "_inferred_signal_type": "EXPANSION"
+    }
+  ]
+}
