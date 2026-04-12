@@ -14,6 +14,7 @@ from app.api.v1.companies import router as companies_router
 from app.api.v1.opportunities import router as opportunities_router
 from app.api.v1.actions import router as actions_router
 from app.api.v1.profile import router as profile_router
+from app.api.v1.contacts import router as contacts_router
 
 router = APIRouter()
 
@@ -28,8 +29,10 @@ router.include_router(opportunities_router)
 router.include_router(actions_router)
 router.include_router(profile_router)
 
-# ── Phase 3+: Remaining routers ───────────────────────────────────────────────
-# TODO: include outreach router      (Phase 3)
-# TODO: include contacts router      (Phase 3)
+# ── Phase 5: People Intelligence ──────────────────────────────────────────────
+router.include_router(contacts_router)
+
+# ── Remaining routers ─────────────────────────────────────────────────────────
+# TODO: include outreach router      (Phase 8)
 # TODO: include agents router        (Phase 2)
 # TODO: include analytics router     (Phase 4)

@@ -1,0 +1,55 @@
+{
+  "contacts": [
+    {
+      "id": "ct-00000-0000-0000-000000000001",
+      "company_id": "co-00000-0000-0000-000000000002",
+      "user_id": "mock-user-id",
+      "name": "Jane Smith",
+      "title": "Chief of Staff",
+      "linkedin_url": "https://linkedin.com/in/janesmith",
+      "email": "jane.smith@mckinsey.com",
+      "seniority": "vp",
+      "pdl_id": "mock-pdl-person-abc12345",
+      "enrichment_json": {
+        "location": "New York, USA",
+        "first_name": "Jane",
+        "last_name": "Smith"
+      },
+      "last_enriched_at": "2026-04-10T10:00:00Z"
+    },
+    {
+      "id": "ct-00000-0000-0000-000000000002",
+      "company_id": "co-00000-0000-0000-000000000002",
+      "user_id": "mock-user-id",
+      "name": "Alex Johnson",
+      "title": "VP Strategy",
+      "linkedin_url": "https://linkedin.com/in/alexjohnson",
+      "email": null,
+      "seniority": "vp",
+      "pdl_id": "mock-pdl-person-def67890",
+      "enrichment_json": {
+        "location": "New York, USA",
+        "first_name": "Alex",
+        "last_name": "Johnson"
+      },
+      "last_enriched_at": "2026-04-10T10:00:00Z"
+    },
+    {
+      "id": "ct-00000-0000-0000-000000000003",
+      "company_id": "co-00000-0000-0000-000000000001",
+      "user_id": "mock-user-id",
+      "name": "Maria Chen",
+      "title": "Principal",
+      "linkedin_url": "https://linkedin.com/in/mariachen",
+      "email": "maria.chen@accenture.com",
+      "seniority": "director",
+      "pdl_id": "mock-pdl-person-ghi11223",
+      "enrichment_json": {
+        "location": "London, UK",
+        "first_name": "Maria",
+        "last_name": "Chen"
+      },
+      "last_enriched_at": "2026-04-09T14:30:00Z"
+    }
+  ]
+}
