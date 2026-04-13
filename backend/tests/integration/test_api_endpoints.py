@@ -29,17 +29,17 @@ async def test_list_signals_returns_200(async_client):
 async def test_list_signals_response_shape(async_client):
     response = await async_client.get("/api/v1/signals")
     data = response.json()
-    assert "signals" in data
+    assert "data" in data
     assert "total" in data
     assert "page" in data
-    assert "page_size" in data
+    assert "per_page" in data
 
 
 @pytest.mark.asyncio
 async def test_list_signals_signals_is_list(async_client):
     response = await async_client.get("/api/v1/signals")
     data = response.json()
-    assert isinstance(data["signals"], list)
+    assert isinstance(data["data"], list)
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_list_signals_filter_by_type_funding(async_client):
     response = await async_client.get("/api/v1/signals?signal_type=FUNDING")
     assert response.status_code == 200
     data = response.json()
-    for signal in data["signals"]:
+    for signal in data["data"]:
         assert signal["type"] == "FUNDING"
 
 
@@ -56,7 +56,7 @@ async def test_list_signals_filter_nonexistent_type_returns_empty(async_client):
     response = await async_client.get("/api/v1/signals?signal_type=NONEXISTENT")
     assert response.status_code == 200
     data = response.json()
-    assert data["signals"] == []
+    assert data["data"] == []
 
 
 @pytest.mark.asyncio
@@ -144,10 +144,10 @@ async def test_list_opportunities_returns_200(async_client):
 async def test_list_opportunities_response_shape(async_client):
     response = await async_client.get("/api/v1/opportunities")
     data = response.json()
-    assert "opportunities" in data
+    assert "data" in data
     assert "total" in data
     assert "page" in data
-    assert "page_size" in data
+    assert "per_page" in data
 
 
 @pytest.mark.asyncio
@@ -155,7 +155,7 @@ async def test_list_opportunities_filter_by_confidence_high(async_client):
     response = await async_client.get("/api/v1/opportunities?confidence=HIGH")
     assert response.status_code == 200
     data = response.json()
-    for opp in data["opportunities"]:
+    for opp in data["data"]:
         assert opp["confidence"] == "HIGH"
 
 
@@ -206,10 +206,10 @@ async def test_list_actions_returns_200(async_client):
 async def test_list_actions_response_shape(async_client):
     response = await async_client.get("/api/v1/actions")
     data = response.json()
-    assert "actions" in data
+    assert "data" in data
     assert "total" in data
     assert "page" in data
-    assert "page_size" in data
+    assert "per_page" in data
 
 
 @pytest.mark.asyncio
@@ -217,7 +217,7 @@ async def test_list_actions_filter_by_status_todo(async_client):
     response = await async_client.get("/api/v1/actions?status=TODO")
     assert response.status_code == 200
     data = response.json()
-    for action in data["actions"]:
+    for action in data["data"]:
         assert action["status"] == "TODO"
 
 

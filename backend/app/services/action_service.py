@@ -72,10 +72,10 @@ class ActionService:
         page_items = items[start:end]
 
         return {
-            "actions": page_items,
+            "data": page_items,
             "total": total,
             "page": page,
-            "page_size": page_size,
+            "per_page": page_size,
         }
 
     # ── Update ────────────────────────────────────────────────────────────────

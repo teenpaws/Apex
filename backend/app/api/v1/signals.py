@@ -18,11 +18,15 @@ router = APIRouter(prefix="/signals", tags=["signals"])
 
 
 class PaginatedSignalsResponse(BaseModel):
-    """Paginated list of signals."""
-    signals: list[SignalRead]
+    """Paginated list of signals.
+
+    Field names match the frontend ``PaginatedResponse<T>`` TypeScript type:
+    ``data`` (array), ``total``, ``page``, ``per_page``.
+    """
+    data: list[SignalRead]
     total: int
     page: int
-    page_size: int
+    per_page: int
 
 
 class IngestRequest(BaseModel):

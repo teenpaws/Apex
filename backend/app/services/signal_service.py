@@ -69,10 +69,10 @@ class SignalService:
         page_signals = signals[start:end]
 
         return {
-            "signals": page_signals,
+            "data": page_signals,
             "total": total,
             "page": page,
-            "page_size": page_size,
+            "per_page": page_size,
         }
 
     async def get_signal(self, signal_id: str) -> dict:

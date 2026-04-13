@@ -2,7 +2,6 @@
 
 import { ArrowRight } from 'lucide-react';
 import type { DashboardStats } from '@/types';
-import { mockDashboardStats } from '@/lib/mock';
 
 const stages = [
   { key: 'signals',       label: 'Signals',       color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
@@ -11,13 +10,19 @@ const stages = [
   { key: 'outreach',      label: 'Outreach',      color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
 ] as const;
 
+const EMPTY_STAGES: DashboardStats['pipeline_stages'] = {
+  signals: 0,
+  opportunities: 0,
+  actions: 0,
+  outreach: 0,
+};
+
 interface PipelineVizProps {
   stats?: DashboardStats | null;
 }
 
 export function PipelineViz({ stats }: PipelineVizProps) {
-  // Fall back to mock data during development / when stats are not yet loaded
-  const { pipeline_stages } = stats ?? mockDashboardStats;
+  const pipeline_stages = stats?.pipeline_stages ?? EMPTY_STAGES;
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">

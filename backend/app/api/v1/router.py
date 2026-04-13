@@ -36,6 +36,9 @@ router.include_router(contacts_router)
 # ── Phase 8: Email Automation ──────────────────────────────────────────────────
 router.include_router(outreach_router)
 
-# ── Remaining routers ─────────────────────────────────────────────────────────
-# TODO: include agents router        (Phase 2)
-# TODO: include analytics router     (Phase 4)
+from app.api.v1.analytics import router as analytics_router
+from app.api.v1.agents import router as agents_router
+
+# ── Phase 9: Analytics + Agent Status ─────────────────────────────────────────
+router.include_router(analytics_router)
+router.include_router(agents_router)

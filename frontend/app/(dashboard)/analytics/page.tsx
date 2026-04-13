@@ -16,6 +16,7 @@ import {
 import { TrendingUp, Zap, CheckSquare, DollarSign, Activity } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { SkeletonCard } from '@/components/shared/SkeletonCard';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { analyticsApi, agentsApi } from '@/lib/api/client';
 import type { DashboardStats, AgentRun } from '@/types';
 
@@ -45,13 +46,6 @@ const MOCK_COMPANY_SIGNALS = [
   { company: 'Back Market', signals: 3 },
   { company: 'PayFit', signals: 2 },
 ];
-
-const MOCK_STATS: DashboardStats = {
-  signals_this_week: 24,
-  new_opportunities: 7,
-  actions_completed: 12,
-  pipeline_stages: { signals: 142, opportunities: 38, actions: 21, outreach: 5 },
-};
 
 // ── Hooks ──────────────────────────────────────────────────────────────────────
 
@@ -191,7 +185,7 @@ export default function AnalyticsPage() {
   const statsQuery = useDashboardStats();
   const runsQuery = useAgentRuns();
 
-  const stats: DashboardStats = statsQuery.data ?? MOCK_STATS;
+  const stats = statsQuery.data;
   const runs: AgentRun[] = runsQuery.data ?? [];
   const costRows = useMemo(() => buildCostRows(runs), [runs]);
 
@@ -217,7 +211,9 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} lines={1} />)}
         </div>
-      ) : (
+      ) : statsQuery.isError ? (
+        <ErrorState error={statsQuery.error as Error} onRetry={() => statsQuery.refetch()} />
+      ) : stats ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Signals this week"
@@ -244,7 +240,7 @@ export default function AnalyticsPage() {
             accent="text-amber-400"
           />
         </div>
-      )}
+      ) : null}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -362,12 +358,14 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Pipeline funnel */}
-      <Card className="p-5 bg-card border-border">
-        <h2 className="text-sm font-semibold text-foreground mb-4">
-          Conversion Pipeline
-        </h2>
-        <PipelineFunnel stages={stats.pipeline_stages} />
-      </Card>
+      {stats && (
+        <Card className="p-5 bg-card border-border">
+          <h2 className="text-sm font-semibold text-foreground mb-4">
+            Conversion Pipeline
+          </h2>
+          <PipelineFunnel stages={stats.pipeline_stages} />
+        </Card>
+      )}
 
       {/* Agent cost table */}
       <Card className="p-5 bg-card border-border">
