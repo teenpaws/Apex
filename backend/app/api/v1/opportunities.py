@@ -20,10 +20,15 @@ router = APIRouter(prefix="/opportunities", tags=["opportunities"])
 # ── Response schemas ──────────────────────────────────────────────────────────
 
 class PaginatedOpportunitiesResponse(BaseModel):
-    opportunities: list[dict]
+    """Paginated list of opportunities.
+
+    Field names match the frontend ``PaginatedResponse<T>`` TypeScript type:
+    ``data`` (array), ``total``, ``page``, ``per_page``.
+    """
+    data: list[dict]
     total: int
     page: int
-    page_size: int
+    per_page: int
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

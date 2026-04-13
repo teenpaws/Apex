@@ -20,10 +20,15 @@ router = APIRouter(prefix="/actions", tags=["actions"])
 # ── Request / response schemas ────────────────────────────────────────────────
 
 class PaginatedActionsResponse(BaseModel):
-    actions: list[dict]
+    """Paginated list of actions.
+
+    Field names match the frontend ``PaginatedResponse<T>`` TypeScript type:
+    ``data`` (array), ``total``, ``page``, ``per_page``.
+    """
+    data: list[dict]
     total: int
     page: int
-    page_size: int
+    per_page: int
 
 
 class ActionUpdateRequest(BaseModel):
