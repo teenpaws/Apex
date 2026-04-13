@@ -15,6 +15,7 @@ from app.api.v1.opportunities import router as opportunities_router
 from app.api.v1.actions import router as actions_router
 from app.api.v1.profile import router as profile_router
 from app.api.v1.contacts import router as contacts_router
+from app.api.v1.outreach import router as outreach_router
 
 router = APIRouter()
 
@@ -32,7 +33,9 @@ router.include_router(profile_router)
 # ── Phase 5: People Intelligence ──────────────────────────────────────────────
 router.include_router(contacts_router)
 
+# ── Phase 8: Email Automation ──────────────────────────────────────────────────
+router.include_router(outreach_router)
+
 # ── Remaining routers ─────────────────────────────────────────────────────────
-# TODO: include outreach router      (Phase 8)
 # TODO: include agents router        (Phase 2)
 # TODO: include analytics router     (Phase 4)
