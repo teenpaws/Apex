@@ -60,8 +60,10 @@ test.describe('Phase 9 — All pages render content', () => {
       // Body must be present
       await expect(page.locator('body')).toBeVisible();
 
-      // Must NOT be a 500 or generic error screen
-      await expect(page.locator('text=500')).not.toBeVisible();
+      // Must NOT be a 500 or generic error screen (use h2 selector to avoid matching "$500M" in content)
+      const h2texts = await page.locator('h2').allTextContents();
+      const hasErrorHeading = h2texts.some((t) => t.trim() === '500' || /internal server error/i.test(t));
+      expect(hasErrorHeading, `${name} must not show a 500 error heading`).toBe(false);
       await expect(page.locator('text=Internal Server Error')).not.toBeVisible();
       await expect(page.locator('text=Application error')).not.toBeVisible();
 
