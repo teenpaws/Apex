@@ -27,6 +27,25 @@
 
 ---
 
+## Environment Setup Checklist
+
+> Keys stored in `backend/.env` only — never committed to git.
+
+| # | Dependency | Status | Notes |
+|---|-----------|--------|-------|
+| 1 | Anthropic API Key | ✅ Configured | All AI agents |
+| 2 | OpenAI API Key | ✅ Configured | Embeddings (`text-embedding-3-small`) |
+| 3 | NewsData.io Key | ✅ Configured | Primary news signal ingestion |
+| 4 | GNews API Key | ✅ Configured | Backup news source |
+| 5 | PDL API Key | ✅ Configured | Contact enrichment |
+| 6 | Hunter.io Key | ✅ Configured | Email discovery by domain |
+| 7 | Gmail OAuth Credentials | ✅ Configured | `GMAIL_CLIENT_ID` + `GMAIL_CLIENT_SECRET` |
+| 8 | Supabase Project | ✅ Configured | URL + anon key + service role + DB URL |
+| 9 | SEC EDGAR | ✅ No key needed | Public API — `data.sec.gov` |
+| 10 | Mock flags disabled | ✅ Ready | `MOCK_AGENTS=false`, `USE_MOCK_DATA=false` |
+
+---
+
 ## Git Branching Convention
 
 Every phase is developed on its own branch and merged into `main` when complete.

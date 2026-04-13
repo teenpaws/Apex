@@ -445,18 +445,18 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 > These are known gaps, unresolved dependencies, and deferred work items that are intentionally
 > excluded from v1.0 scope. Resolve before v1.5 or production launch.
 
-### API Keys Required (Placeholders In Place)
+### API Keys Required (All Configured ✅)
 | Service               | Used For                    | Where Configured                     | Status      |
 |-----------------------|-----------------------------|--------------------------------------|-------------|
-| `ANTHROPIC_API_KEY`   | All AI agents               | `.env` + `settings.py`               | ⏳ Pending  |
-| `OPENAI_API_KEY`      | Embeddings (`text-embedding-3-small`) | `.env` + `settings.py`     | ⏳ Pending  |
-| `NEWSDATA_API_KEY`    | Signal ingestion — primary news | `.env` + `integrations/newsdata_client.py` | ⏳ Pending |
-| `GNEWS_API_KEY`       | Signal ingestion — backup news | `.env` + `integrations/gnews_client.py` | ⏳ Pending |
-| `PDL_API_KEY`         | Contact enrichment (replaces Proxycurl) | `.env` + `integrations/pdl_client.py` | ⏳ Pending |
-| `HUNTER_API_KEY`      | Email finding by domain     | `.env` + `integrations/hunter_client.py` | ⏳ Pending |
-| `GMAIL_CLIENT_ID`     | Email OAuth                 | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
-| `GMAIL_CLIENT_SECRET` | Email OAuth                 | `.env` + `integrations/gmail_client.py` | ⏳ Pending |
-| Supabase project URL + keys | Database + Auth        | `.env`                               | ⏳ Pending  |
+| `ANTHROPIC_API_KEY`   | All AI agents               | `.env` + `settings.py`               | ✅ Configured |
+| `OPENAI_API_KEY`      | Embeddings (`text-embedding-3-small`) | `.env` + `settings.py`     | ✅ Configured |
+| `NEWSDATA_API_KEY`    | Signal ingestion — primary news | `.env` + `integrations/newsdata_client.py` | ✅ Configured |
+| `GNEWS_API_KEY`       | Signal ingestion — backup news | `.env` + `integrations/gnews_client.py` | ✅ Configured |
+| `PDL_API_KEY`         | Contact enrichment (replaces Proxycurl) | `.env` + `integrations/pdl_client.py` | ✅ Configured |
+| `HUNTER_API_KEY`      | Email finding by domain     | `.env` + `integrations/hunter_client.py` | ✅ Configured |
+| `GMAIL_CLIENT_ID`     | Email OAuth                 | `.env` + `integrations/gmail_client.py` | ✅ Configured |
+| `GMAIL_CLIENT_SECRET` | Email OAuth                 | `.env` + `integrations/gmail_client.py` | ✅ Configured |
+| Supabase URL + anon key + service role + DB URL | Database + Auth | `.env`          | ✅ Configured |
 
 > **Removed (no longer in project):**
 > - `PROXYCURL_API_KEY` — Proxycurl shut down July 2025 after LinkedIn lawsuit. Replaced by PDL.
