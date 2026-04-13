@@ -1,0 +1,57 @@
+{
+  "emails": [
+    {
+      "id": "email-001",
+      "user_id": "mock-user-id",
+      "action_id": "action-001",
+      "contact_id": "contact-001",
+      "subject": "Strategy role opportunity at Stripe",
+      "body": "Hi Sarah,\n\nI noticed Stripe's recent Series H announcement and the accelerated hiring across the strategy function. Given my background leading M&A integration at BNP Paribas and my MBA focus on digital payments, I believe I could add immediate value to your expansion into EMEA markets.\n\nWould you be open to a 20-minute call this week?\n\nBest,\nAlex",
+      "tone": "PROFESSIONAL",
+      "draft_json": {
+        "variants": [
+          {
+            "tone": "Professional",
+            "subject": "Strategy role opportunity at Stripe",
+            "body": "Hi Sarah,\n\nI noticed Stripe's recent Series H announcement...",
+            "key_points_used": ["Series H funding", "EMEA expansion", "M&A background"]
+          },
+          {
+            "tone": "Warm",
+            "subject": "Congrats on Stripe's Series H — quick intro",
+            "body": "Hi Sarah,\n\nJust saw the Series H news — exciting milestone...",
+            "key_points_used": ["Series H milestone", "EMEA expansion"]
+          },
+          {
+            "tone": "Direct",
+            "subject": "EMEA strategy hire at Stripe?",
+            "body": "Sarah,\n\nStripe's Series H suggests you're accelerating EMEA expansion...",
+            "key_points_used": ["Funding", "EMEA growth signal"]
+          }
+        ]
+      },
+      "sent_at": null,
+      "gmail_message_id": null,
+      "opened_at": null,
+      "replied_at": null,
+      "reply_detected_at": null,
+      "created_at": "2026-04-13T10:00:00Z"
+    },
+    {
+      "id": "email-002",
+      "user_id": "mock-user-id",
+      "action_id": "action-002",
+      "contact_id": "contact-002",
+      "subject": "VP Strategy — post-acquisition integration at Salesforce",
+      "body": "Hi Marcus,\n\nCongrats on the MuleSoft integration milestone...",
+      "tone": "WARM",
+      "draft_json": null,
+      "sent_at": "2026-04-10T14:30:00Z",
+      "gmail_message_id": "msg-abc123",
+      "opened_at": "2026-04-11T09:15:00Z",
+      "replied_at": null,
+      "reply_detected_at": null,
+      "created_at": "2026-04-09T11:00:00Z"
+    }
+  ]
+}
