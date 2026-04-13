@@ -48,3 +48,7 @@ pytest-cov==6.0.0
 anyio[trio]==4.7.0
 respx==0.21.1          # httpx mock library for HTTP call testing
 feedparser==6.0.11     # RSS/Atom feed parsing
+
+# ── Gmail integration ──────────────────────────────────────────────────────────
+google-api-python-client==2.131.0
+google-auth-oauthlib==1.2.0
