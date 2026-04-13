@@ -90,15 +90,16 @@ export function OpportunityFilters({
     onChange({ ...filters, status: toggleArrayItem(filters.status, s) });
   }
 
-  function handleTimelineChange(val: string) {
+  function handleTimelineChange(val: string | null) {
     const parsed = val === 'null' ? null : Number(val);
     onChange({ ...filters, timeline_max_weeks: parsed });
   }
 
-  function handleSortChange(val: string) {
+  function handleSortChange(val: OpportunityFilterState['sort'] | null) {
+    if (!val) return;
     onChange({
       ...filters,
-      sort: val as OpportunityFilterState['sort'],
+      sort: val,
     });
   }
 
@@ -178,7 +179,7 @@ export function OpportunityFilters({
                 ]
                   .join(' ')}
               >
-                {s === 'JOB_POSTING_PATTERN' ? 'Job Pattern' : s.charAt(0) + s.slice(1).toLowerCase()}
+                {s.charAt(0) + s.slice(1).toLowerCase()}
               </button>
             );
           })}
