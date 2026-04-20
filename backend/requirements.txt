@@ -13,6 +13,8 @@
 # ── Web framework ──────────────────────────────────────────────────────────────
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
+slowapi==0.1.9          # FastAPI rate limiting (Redis-backed)
+limits==3.13.0          # Storage backends for slowapi
 
 # ── Database ───────────────────────────────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.36
