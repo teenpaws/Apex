@@ -21,6 +21,8 @@ coverage.xml
 
 # Environment
 .env
+.env.prod
+.env.staging
 .env.local
 .env.*.local
 
