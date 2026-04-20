@@ -8,12 +8,14 @@ Usage:
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # ── Application ───────────────────────────────────────────────────────────
     APP_VERSION: str = "1.0.0"
+    ENVIRONMENT: str = "development"  # development | staging | production
 
     # ── Database / Supabase ───────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/apex"
@@ -42,6 +44,15 @@ class Settings(BaseSettings):
     GMAIL_CLIENT_ID: str = "placeholder-gmail-client-id"
     GMAIL_CLIENT_SECRET: str = "placeholder-gmail-client-secret"
     GMAIL_REDIRECT_URI: str = "http://localhost:8000/api/v1/outreach/oauth/callback"
+
+    # ── Logging ───────────────────────────────────────────────────────────────
+    LOG_LEVEL: str = "INFO"
+    JSON_LOGS: bool = False  # True in production for structured log aggregation
+
+    # ── CORS ──────────────────────────────────────────────────────────────────
+    ALLOWED_ORIGINS: list[str] = Field(
+        default=["http://localhost:3000", "http://localhost:8000"]
+    )
 
     # ── Development Flags ─────────────────────────────────────────────────────
     # True  → no real API/DB calls; uses fixture files and mock responses
