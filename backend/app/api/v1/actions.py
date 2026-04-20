@@ -50,19 +50,21 @@ class ActionUpdateRequest(BaseModel):
 )
 async def list_actions(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    page_size: int | None = Query(None, include_in_schema=False),  # legacy alias
     status: str | None = Query(None, description="Filter by status: TODO, IN_PROGRESS, DONE, SNOOZED"),
     priority: str | None = Query(None, description="Filter by priority: HIGH, MEDIUM, LOW"),
     current_user: dict = Depends(get_current_user),
 ) -> PaginatedActionsResponse:
     settings = get_settings()
+    effective_page_size = page_size or per_page
     service = ActionService(
         user_id=current_user["id"],
         use_mock=settings.USE_MOCK_DATA,
     )
     result = await service.list_actions(
         page=page,
-        page_size=page_size,
+        page_size=effective_page_size,
         status=status,
         priority=priority,
     )

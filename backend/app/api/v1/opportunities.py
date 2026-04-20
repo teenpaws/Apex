@@ -44,20 +44,22 @@ class PaginatedOpportunitiesResponse(BaseModel):
 )
 async def list_opportunities(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    page_size: int | None = Query(None, include_in_schema=False),  # legacy alias
     confidence: str | None = Query(None, description="Filter by confidence: HIGH, MEDIUM, SPECULATIVE"),
     status: str | None = Query(None, description="Filter by status: PREDICTED, APPROACHED, INTERVIEWING, CLOSED"),
     company_id: str | None = Query(None, description="Filter by company UUID"),
     current_user: dict = Depends(get_current_user),
 ) -> PaginatedOpportunitiesResponse:
     settings = get_settings()
+    effective_page_size = page_size or per_page
     service = OpportunityService(
         user_id=current_user["id"],
         use_mock=settings.USE_MOCK_DATA,
     )
     result = await service.list_opportunities(
         page=page,
-        page_size=page_size,
+        page_size=effective_page_size,
         confidence=confidence,
         status=status,
         company_id=company_id,

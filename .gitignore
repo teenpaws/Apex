@@ -61,3 +61,12 @@ npm-debug.log*
 
 # Claude Code local settings
 .claude/
+
+# Dev convenience files (contain credentials / temp test data)
+backend/login.json
+backend/ingest.json
+
+# Celery beat schedule state (binary, local only)
+backend/celerybeat-schedule
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal

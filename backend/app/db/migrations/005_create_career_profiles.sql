@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS career_profiles (
     id                  uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id             uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    current_role        text,
+    "current_role"      text,
     target_roles        text[] NOT NULL DEFAULT '{}',
     industries          text[] NOT NULL DEFAULT '{}',
     aspirations_text    text,

@@ -5,21 +5,21 @@ Provides reusable dependencies (current user, DB session, etc.)
 that can be injected into route handlers via Depends().
 """
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import get_settings
 from app.core.security import get_token_from_header, verify_token
 
-# OAuth2 scheme — the tokenUrl here is a placeholder; Supabase handles auth.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+# HTTPBearer shows a simple "Value: <token>" input in Swagger UI.
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # Fixed mock user returned when USE_MOCK_DATA=True — no token required.
 MOCK_USER = {"id": "mock-user-id", "email": "test@apex.ai"}
 
 
 async def get_current_user(
-    token: str | None = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
 ) -> dict:
     """
     Validate the Bearer JWT and return the authenticated user dict.
@@ -39,13 +39,14 @@ async def get_current_user(
     if settings.USE_MOCK_DATA:
         return MOCK_USER
 
-    if token is None:
+    if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    token = credentials.credentials
     payload = verify_token(token)
 
     user_id = payload.get("sub")

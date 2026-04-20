@@ -96,21 +96,23 @@ async def _persist_events(
     if use_mock:
         return _mock_ingest_result(events)
 
-    # Live path — real SQLAlchemy async session required.
+    # Fast-path: nothing to do.
+    if not events:
+        return {"ingested": 0, "duplicates": 0, "errors": 0}
+
+    # Live path — raw asyncpg (avoids psycopg2/pgvector ORM type issues).
     try:
-        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # noqa: PLC0415
-        from sqlalchemy.orm import sessionmaker  # noqa: PLC0415
-        from sqlalchemy import select  # noqa: PLC0415
+        import asyncpg  # noqa: PLC0415
+        import json as _json  # noqa: PLC0415
         from app.core.config import get_settings  # noqa: PLC0415
-        from app.models.signal import SignalORM  # noqa: PLC0415
+        from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
         from app.models.enums import SignalType  # noqa: PLC0415
     except ImportError as exc:
         logger.error("DB imports unavailable — cannot persist signals: %s", exc)
         return {"ingested": 0, "duplicates": 0, "errors": len(events)}
 
     settings = get_settings()
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    db_url = get_asyncpg_db_url()
 
     ingested = 0
     duplicates = 0
@@ -118,24 +120,26 @@ async def _persist_events(
 
     resolved_company_id = _resolve_company_uuid(company_id)
 
-    # Parse user_id to UUID; "system" (beat scheduler) gets a fresh UUID.
+    # Parse user_id to UUID; "system" (beat scheduler) uses the seeded user.
     try:
         user_uuid = uuid.UUID(user_id)
     except (ValueError, AttributeError):
         user_uuid = uuid.uuid4()
 
-    async with async_session() as session:
+    conn = await asyncpg.connect(db_url, statement_cache_size=0)
+    try:
         for event in events:
             try:
                 dedup_hash = _make_dedup_hash(
                     event.source, event.external_id, event.signal_date
                 )
 
-                # Duplicate check — unique constraint on dedup_hash
-                result = await session.execute(
-                    select(SignalORM).where(SignalORM.dedup_hash == dedup_hash)
+                # Duplicate check
+                existing = await conn.fetchval(
+                    "SELECT id FROM signals WHERE dedup_hash = $1",
+                    dedup_hash,
                 )
-                if result.scalar_one_or_none() is not None:
+                if existing is not None:
                     duplicates += 1
                     logger.debug(
                         "Duplicate skipped: hash=%s source=%r",
@@ -145,28 +149,36 @@ async def _persist_events(
                     continue
 
                 # Infer signal type from raw_data tag set by the client
-                raw_type: str | None = (
-                    (event.raw_data or {}).get("_signal_type")
-                )
+                raw_type: str | None = (event.raw_data or {}).get("_signal_type")
                 try:
                     signal_type = SignalType(raw_type) if raw_type else SignalType.FUNDING
                 except ValueError:
                     signal_type = SignalType.FUNDING
 
-                signal = SignalORM(
-                    user_id=user_uuid,
-                    company_id=resolved_company_id,
-                    type=signal_type.value,
-                    source=event.source,
-                    title=(event.title or "")[:500] or None,
-                    description=(event.description or "")[:2000] or None,
-                    raw_data_json=event.raw_data or {},
-                    signal_date=event.signal_date,
-                    is_duplicate=False,
-                    dedup_hash=dedup_hash,
+                # Explicit INSERT — omits embedding column (populated by Phase 4)
+                await conn.execute(
+                    """
+                    INSERT INTO signals
+                        (id, user_id, company_id, type, source, title,
+                         description, raw_data_json, signal_date,
+                         is_duplicate, dedup_hash)
+                    VALUES
+                        ($1, $2, $3, $4, $5, $6,
+                         $7, $8::jsonb, $9,
+                         $10, $11)
+                    """,
+                    uuid.uuid4(),
+                    user_uuid,
+                    resolved_company_id,
+                    signal_type.value,
+                    event.source,
+                    (event.title or "")[:500] or None,
+                    (event.description or "")[:2000] or None,
+                    _json.dumps(event.raw_data or {}),
+                    event.signal_date,
+                    False,
+                    dedup_hash,
                 )
-                session.add(signal)
-                await session.commit()
                 ingested += 1
                 logger.info(
                     "Signal ingested: source=%r company=%r hash=%s",
@@ -176,13 +188,14 @@ async def _persist_events(
                 )
 
             except Exception as exc:  # noqa: BLE001
-                await session.rollback()
                 errors += 1
                 logger.error(
                     "Failed to persist signal from source=%r: %s",
                     getattr(event, "source", "unknown"),
                     exc,
                 )
+    finally:
+        await conn.close()
 
     return {"ingested": ingested, "duplicates": duplicates, "errors": errors}
 
@@ -193,7 +206,44 @@ async def _persist_events(
 # call asyncio.run(_run_*(...)) to bridge the sync Celery task boundary.
 # This also makes the business logic trivially testable without a Celery broker.
 
-async def _run_newsdata(user_id: str, company_ids: list[str]) -> dict[str, int]:
+async def _get_companies_from_db() -> list[dict]:
+    """
+    Fetch all companies from the DB.
+
+    Returns a list of ``{"id": str, "name": str}`` dicts, or an empty list
+    on any DB error (so the worker degrades gracefully rather than crashing).
+    """
+    try:
+        import asyncpg  # noqa: PLC0415
+        from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+        db_url = get_asyncpg_db_url()
+        conn = await asyncpg.connect(db_url, statement_cache_size=0)
+        try:
+            rows = await conn.fetch(
+                "SELECT id::text, name FROM companies ORDER BY name"
+            )
+            return [{"id": row["id"], "name": row["name"]} for row in rows]
+        finally:
+            await conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("_get_companies_from_db failed: %s", exc)
+        return []
+
+
+async def _run_newsdata(
+    user_id: str,
+    company_ids: list[str],
+    company_name_map: dict[str, str] | None = None,
+) -> dict[str, int]:
+    """
+    Ingest NewsData.io signals for every company in *company_ids*.
+
+    *company_name_map* (optional): ``{company_id: company_name}``.  When
+    provided (live mode) the API is queried by real company name rather than
+    the raw UUID string, and the correct UUID is stored in the signal row.
+    Without it (mock mode), the ``company_id`` string is used as-is.
+    """
     from app.core.config import get_settings  # noqa: PLC0415
     from app.integrations.newsdata_client import NewsDataClient  # noqa: PLC0415
 
@@ -202,7 +252,8 @@ async def _run_newsdata(user_id: str, company_ids: list[str]) -> dict[str, int]:
     totals: dict[str, int] = {"ingested": 0, "duplicates": 0, "errors": 0}
 
     for company_id in company_ids:
-        events = await client.fetch_company_news(company_id)
+        company_name = (company_name_map or {}).get(company_id, company_id)
+        events = await client.fetch_company_news(company_name)
         result = await _persist_events(
             events, user_id, company_id, use_mock=settings.USE_MOCK_DATA
         )
@@ -212,7 +263,16 @@ async def _run_newsdata(user_id: str, company_ids: list[str]) -> dict[str, int]:
     return totals
 
 
-async def _run_gnews(user_id: str, company_ids: list[str]) -> dict[str, int]:
+async def _run_gnews(
+    user_id: str,
+    company_ids: list[str],
+    company_name_map: dict[str, str] | None = None,
+) -> dict[str, int]:
+    """
+    Ingest GNews signals for every company in *company_ids*.
+
+    See :func:`_run_newsdata` for *company_name_map* semantics.
+    """
     from app.core.config import get_settings  # noqa: PLC0415
     from app.integrations.gnews_client import GNewsClient  # noqa: PLC0415
 
@@ -221,7 +281,8 @@ async def _run_gnews(user_id: str, company_ids: list[str]) -> dict[str, int]:
     totals: dict[str, int] = {"ingested": 0, "duplicates": 0, "errors": 0}
 
     for company_id in company_ids:
-        events = await client.fetch_company_news(company_id)
+        company_name = (company_name_map or {}).get(company_id, company_id)
+        events = await client.fetch_company_news(company_name)
         result = await _persist_events(
             events, user_id, company_id, use_mock=settings.USE_MOCK_DATA
         )
@@ -231,7 +292,17 @@ async def _run_gnews(user_id: str, company_ids: list[str]) -> dict[str, int]:
     return totals
 
 
-async def _run_sec_edgar(user_id: str, company_ids: list[str]) -> dict[str, int]:
+async def _run_sec_edgar(
+    user_id: str,
+    company_ids: list[str],
+    company_name_map: dict[str, str] | None = None,
+) -> dict[str, int]:
+    """
+    Ingest SEC EDGAR (Form D + 8-K) filings for every company in *company_ids*.
+
+    SEC EDGAR is US-only and searches by company name, so *company_name_map*
+    is used the same way as in :func:`_run_newsdata`.
+    """
     from app.core.config import get_settings  # noqa: PLC0415
     from app.integrations.sec_edgar_client import SECEdgarClient  # noqa: PLC0415
 
@@ -240,8 +311,9 @@ async def _run_sec_edgar(user_id: str, company_ids: list[str]) -> dict[str, int]
     totals: dict[str, int] = {"ingested": 0, "duplicates": 0, "errors": 0}
 
     for company_id in company_ids:
-        form_d_events = await client.fetch_form_d(company_id)
-        k8_events = await client.fetch_8k_filings(company_id)
+        company_name = (company_name_map or {}).get(company_id, company_id)
+        form_d_events = await client.fetch_form_d(company_name)
+        k8_events = await client.fetch_8k_filings(company_name)
         result = await _persist_events(
             form_d_events + k8_events,
             user_id,
@@ -345,33 +417,53 @@ def _register_tasks(app) -> None:  # type: ignore[no-untyped-def]
         settings = get_settings()
 
         if settings.USE_MOCK_DATA:
-            company_ids = [
+            company_ids: list[str] = [
                 "co-00000-0000-0000-000000000001",
                 "co-00000-0000-0000-000000000002",
             ]
-            feed_urls = ["https://mock-company-blog.example.com/rss"]
+            feed_urls: list[str] = ["https://mock-company-blog.example.com/rss"]
+            company_name_map: dict[str, str] | None = None  # mock: IDs used as names
         else:
-            # TODO(phase-4): query companies table for user's tracked companies
-            logger.warning(
-                "ingest_all_sources: live company lookup not yet implemented — "
-                "returning empty result."
+            # Live mode: look up real company names from the DB so API clients
+            # can search by name and signals are stored with correct company UUIDs.
+            companies = asyncio.run(_get_companies_from_db())
+            if not companies:
+                logger.warning(
+                    "ingest_all_sources: no companies found in DB — nothing to ingest. "
+                    "Run 'python -m app.db.seeds.seed_production' to seed target companies."
+                )
+                return {"ingested": 0, "duplicates": 0, "errors": 0}
+
+            company_ids = [c["id"] for c in companies]
+            company_name_map = {c["id"]: c["name"] for c in companies}
+            feed_urls = []  # RSS per-company feeds — Phase 4
+            logger.info(
+                "ingest_all_sources: ingesting for %d companies: %s",
+                len(companies),
+                [c["name"] for c in companies[:5]],  # log first 5 for brevity
             )
-            return {"ingested": 0, "duplicates": 0, "errors": 0}
 
         totals: dict[str, int] = {"ingested": 0, "duplicates": 0, "errors": 0}
 
-        tasks = [
-            ("newsdata",   lambda: asyncio.run(_run_newsdata(user_id, company_ids))),
-            ("gnews",      lambda: asyncio.run(_run_gnews(user_id, company_ids))),
-            ("sec_edgar",  lambda: asyncio.run(_run_sec_edgar(user_id, company_ids))),
-            ("rss",        lambda: asyncio.run(_run_rss(user_id, feed_urls))),
+        source_tasks = [
+            ("newsdata",  lambda: asyncio.run(_run_newsdata(user_id, company_ids, company_name_map))),
+            ("gnews",     lambda: asyncio.run(_run_gnews(user_id, company_ids, company_name_map))),
+            ("sec_edgar", lambda: asyncio.run(_run_sec_edgar(user_id, company_ids, company_name_map))),
+            ("rss",       lambda: asyncio.run(_run_rss(user_id, feed_urls))),
         ]
 
-        for source_name, run_fn in tasks:
+        for source_name, run_fn in source_tasks:
             try:
                 result = run_fn()
                 for k in totals:
                     totals[k] += result.get(k, 0)
+                logger.info(
+                    "ingest_all_sources: %r → ingested=%d duplicates=%d errors=%d",
+                    source_name,
+                    result.get("ingested", 0),
+                    result.get("duplicates", 0),
+                    result.get("errors", 0),
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.error(
                     "ingest_all_sources: %r sub-task failed: %s", source_name, exc

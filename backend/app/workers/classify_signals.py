@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,6 +30,99 @@ from app.core.celery_app import celery_app
 from app.core.config import get_settings
 
 logger = get_task_logger(__name__)
+
+
+# ── Live DB helpers ────────────────────────────────────────────────────────────
+
+async def _load_signal_from_db(signal_id: str) -> dict[str, Any]:
+    """
+    Load a signal row plus its company name and the linked user's career profile.
+
+    Returns a dict matching the shape expected by SignalClassifierInput.
+    Raises ValueError if the signal is not found.
+    """
+    import asyncpg  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    db_url = get_asyncpg_db_url()
+    conn = await asyncpg.connect(db_url, statement_cache_size=0)
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT s.id, s.user_id, s.title, s.description, s.source, s.signal_date,
+                   c.name AS company_name
+            FROM signals s
+            LEFT JOIN companies c ON c.id = s.company_id
+            WHERE s.id = $1
+            """,
+            uuid.UUID(signal_id),
+        )
+        if not row:
+            raise ValueError(f"Signal not found: {signal_id}")
+
+        profile = await conn.fetchrow(
+            """
+            SELECT target_roles, industries
+            FROM career_profiles
+            WHERE user_id = $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 1
+            """,
+            row["user_id"],
+        )
+        target_roles: list[str] = list(profile["target_roles"]) if profile else []
+        industries: list[str] = list(profile["industries"]) if profile else []
+
+        return {
+            "id": str(row["id"]),
+            "user_id": str(row["user_id"]),
+            "title": row["title"] or "",
+            "description": row["description"] or "",
+            "source": row["source"] or "",
+            "signal_date": (
+                row["signal_date"].isoformat()
+                if row["signal_date"]
+                else datetime.now(timezone.utc).isoformat()
+            ),
+            "company_name": row["company_name"] or "",
+            "user_target_industries": industries,
+            "user_target_roles": target_roles,
+        }
+    finally:
+        await conn.close()
+
+
+async def _update_signal_classification(
+    signal_id: str,
+    signal_type: str,
+    relevance_score: float,
+) -> None:
+    """Write classification result back to the signals table."""
+    import asyncpg  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    db_url = get_asyncpg_db_url()
+    conn = await asyncpg.connect(db_url, statement_cache_size=0)
+    try:
+        await conn.execute(
+            """
+            UPDATE signals
+            SET type = $1,
+                relevance_score = $2,
+                processed_at = $3
+            WHERE id = $4
+            """,
+            signal_type,
+            relevance_score,
+            datetime.now(timezone.utc),
+            uuid.UUID(signal_id),
+        )
+        logger.info(
+            "DB updated: signal %s → type=%s relevance=%.2f",
+            signal_id, signal_type, relevance_score,
+        )
+    finally:
+        await conn.close()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -114,13 +208,7 @@ def classify_signal(self, signal_id: str) -> dict[str, Any]:
         if settings.USE_MOCK_DATA:
             signal_data = _load_mock_signal(signal_id)
         else:
-            # Production: query Supabase/SQLAlchemy
-            # from app.db.session import get_async_session
-            # async with get_async_session() as session:
-            #     signal = await session.get(SignalORM, signal_id)
-            raise NotImplementedError(
-                "Live DB reads not yet wired — set USE_MOCK_DATA=true"
-            )
+            signal_data = await _load_signal_from_db(signal_id)
 
         # 2. Run the classifier agent
         from app.agents.signal_classifier import SignalClassifierAgent, SignalClassifierInput
@@ -151,6 +239,10 @@ def classify_signal(self, signal_id: str) -> dict[str, Any]:
             )
             if settings.USE_MOCK_DATA:
                 _mock_update_signal(signal_id, output.signal_type, output.relevance_score)
+            else:
+                await _update_signal_classification(
+                    signal_id, output.signal_type, output.relevance_score
+                )
             return {
                 "signal_id": signal_id,
                 "signal_type": output.signal_type,
@@ -163,8 +255,9 @@ def classify_signal(self, signal_id: str) -> dict[str, Any]:
         if settings.USE_MOCK_DATA:
             _mock_update_signal(signal_id, output.signal_type, output.relevance_score)
         else:
-            # Production DB update (to be wired when USE_MOCK_DATA=false)
-            pass
+            await _update_signal_classification(
+                signal_id, output.signal_type, output.relevance_score
+            )
 
         # 5. Queue embedding for relevant signals
         logger.info(
@@ -258,9 +351,7 @@ def embed_signal(self, signal_id: str) -> dict[str, Any]:
         if settings.USE_MOCK_DATA:
             signal_data = _load_mock_signal(signal_id)
         else:
-            raise NotImplementedError(
-                "Live DB reads not yet wired — set USE_MOCK_DATA=true"
-            )
+            signal_data = await _load_signal_from_db(signal_id)
 
         text_to_embed = f"{signal_data['title']}\n\n{signal_data['description']}"
 
@@ -271,10 +362,23 @@ def embed_signal(self, signal_id: str) -> dict[str, Any]:
         )
         embedding = response.data[0].embedding  # list[float], 1536 dims
 
-        # Store embedding (production DB write)
-        # await session.execute(
-        #     update(SignalORM).where(SignalORM.id == signal_id).values(embedding=embedding)
-        # )
+        # Store embedding via raw asyncpg (pgvector stored as text cast)
+        import asyncpg  # noqa: PLC0415
+        import json as _json  # noqa: PLC0415
+        from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+        db_url = get_asyncpg_db_url()
+        conn = await asyncpg.connect(db_url, statement_cache_size=0)
+        try:
+            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+            await conn.execute(
+                "UPDATE signals SET embedding = $1::vector WHERE id = $2",
+                embedding_str,
+                uuid.UUID(signal_id),
+            )
+        finally:
+            await conn.close()
+
         logger.info("embed_signal: signal %s embedded (%d dims)", signal_id, len(embedding))
         return {"signal_id": signal_id, "embedded": True}
 

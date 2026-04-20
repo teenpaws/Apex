@@ -125,6 +125,17 @@ async def get_db() -> AsyncGenerator:
             raise
 
 
+def get_db_client():
+    """Alias for get_supabase_client — used by analytics and service modules."""
+    return get_supabase_client()
+
+
+def get_asyncpg_db_url() -> str:
+    """Return the raw asyncpg-compatible DATABASE_URL for direct connections."""
+    settings = get_settings()
+    return settings.DATABASE_URL.replace('postgresql+asyncpg://', 'postgresql://').replace('postgresql+psycopg2://', 'postgresql://')
+
+
 def get_supabase_client():
     """
     Return a supabase-py client configured with project URL and service role key.
