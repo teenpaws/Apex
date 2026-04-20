@@ -18,11 +18,14 @@ from app.core.errors import (
     apex_exception_handler,
     unhandled_exception_handler,
 )
+from app.core.logging_config import configure_logging
 
 
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application instance."""
     settings = get_settings()
+
+    configure_logging(log_level=settings.LOG_LEVEL, json_logs=settings.JSON_LOGS)
 
     app = FastAPI(
         title="Apex API",
@@ -37,10 +40,11 @@ def create_app() -> FastAPI:
     )
 
     # ── Middleware ─────────────────────────────────────────────────────────────
-    # In development, allow all origins. Tighten this before production.
+    # In development, allow all origins. In prod, restrict to ALLOWED_ORIGINS.
+    origins = ["*"] if settings.ENVIRONMENT == "development" else settings.ALLOWED_ORIGINS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
