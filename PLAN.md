@@ -1,7 +1,7 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-13 | Current Phase: **Phase 9 — Full Integration & E2E**
+> Last updated: 2026-04-21 | Current Phase: **Phase 12 — Live Production Run** | IN PROGRESS ⏳
 
 ---
 
@@ -920,6 +920,67 @@ curl http://localhost:8000/api/v1/signals
 
 ---
 
+## Phase 12: Live Production Run — Signal Classification Pipeline
+
+**Goal:** All 1,446 real signals classified + embedded with real Claude Haiku + OpenAI calls. Opportunity Predictor running on relevant signals. Full end-to-end AI pipeline live.
+
+**Status:** ⏳ IN PROGRESS — Started 2026-04-21
+
+**Pre-requisite:** Phase 11 complete ✅
+
+### What Was Completed (Session 1 — 2026-04-21)
+
+#### Signal Ingestion — FULLY LIVE ✅
+- `ingest_signals.py`: `_get_companies_from_db()` queries 16 companies from Supabase
+- `_run_newsdata` / `_run_gnews` / `_run_sec_edgar` now accept `company_name_map` so news APIs get readable names, DB writes get correct UUIDs
+- `_persist_events`: fully rewritten with raw asyncpg, omits `embedding` column (pgvector-python not needed), dedup via SHA-256 hash
+- `signal_service.py`: `trigger_ingest()` now dispatches real Celery tasks via `apply_async`
+- **Result: 1,446 real signals in DB** from NewsData.io, GNews, SEC EDGAR (Form D + 8-K filings)
+
+#### Signal Classification — WIRED + RUNNING ✅
+- `classify_signals.py`: live DB path fully wired
+  - `_load_signal_from_db()`: asyncpg fetch of signal + company name + user career profile
+  - `_update_signal_classification()`: asyncpg UPDATE of type/relevance_score/processed_at
+  - `classify_signal` task calls real **Claude Haiku** for each signal
+  - Gated-out signals (relevance < 0.4) also written to DB
+- `embed_signal` task calls real **OpenAI text-embedding-3-small** (1536-dim vectors stored via `embedding=$1::vector`)
+- `POST /signals/classify` endpoint added — queries unprocessed signals, dispatches batch task
+
+#### Session Cut Point
+- **1,446 tasks queued** for classification at 02:01 UTC, 2026-04-21
+- **~26 signals classified** before worker was stopped to save API cost
+- Worker was processing at ~7s/signal (solo pool, no parallelism)
+
+### Sprint 12.2 — Resume Tomorrow
+
+#### Task A: Complete Signal Classification ⏳
+1. Start Celery worker (see "How to Restart" below)
+2. Trigger classification: `POST /api/v1/signals/classify`
+   - Will re-queue only signals where `processed_at IS NULL`
+3. Wait for all 1,420 remaining signals to process (~3 hours at 7s/signal)
+   - OR: consider running with `--concurrency=2` to speed up (test on Windows first)
+
+#### Task B: Run Opportunity Predictor 🔲
+After classification completes, trigger the next layer:
+1. Query all signals with `relevance_score >= 0.4` and `processed_at IS NOT NULL`
+2. Group by `company_id`
+3. For each company with ≥1 relevant signal, run `OpportunityPredictorAgent` (Claude Sonnet)
+4. Save predicted opportunities to `opportunities` table
+
+**Endpoint to build:** `POST /api/v1/opportunities/predict` — or dispatch via Celery directly
+
+#### Task C: Career Fit Scorer + Positioning Advisor 🔲
+After opportunity prediction, run in parallel:
+- `CareerFitScorerAgent` (Claude Sonnet) → `fit_score` on each opportunity
+- `PositioningAdvisorAgent` (Claude Sonnet) → `positioning_notes` on each opportunity
+
+#### Task D: Action Generator 🔲
+After fit + positioning, run `ActionGeneratorAgent` (Claude Haiku):
+- Input: opportunity + fit_score + contacts
+- Output: action items with priority, type, due_date
+
+---
+
 ## Progress Tracker
 
 ### By Phase
@@ -939,6 +1000,7 @@ curl http://localhost:8000/api/v1/signals
 | 9 | ✅ Complete | 4/4 | 253 BE tests + 45 Playwright E2E — all pass |
 | 10 | ✅ Complete | 3/3 | 79% BE coverage, fuzz+security tests, ErrorBoundary |
 | 11 | ✅ Complete | 2/2 | Docker stack, JSON logging, README — 2026-04-21 |
+| 12 | ⏳ In Progress | 1/? | Signal ingestion live ✅, classification wired ✅, 1,446 signals in DB ✅, ~26 classified so far |
 
 **Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions.
 
@@ -982,6 +1044,90 @@ Phase 5 (People Intel) ─────────┘         ↓
                     ↓
             Phase 11 (Deployment)
 ```
+
+---
+
+---
+
+## 🔄 How to Restart Tomorrow (Phase 12 Continuation)
+
+> Run these commands in order when you start a new session.
+
+### Step 1 — Start Redis (required for Celery)
+Open a terminal, run:
+```powershell
+# If Redis is installed as a Windows service:
+Start-Service Redis
+
+# OR if running Redis manually:
+redis-server
+```
+
+### Step 2 — Start the FastAPI server
+Open a new terminal in `E:\Claude Projects\Apex\backend`:
+```powershell
+cd "E:\Claude Projects\Apex\backend"
+C:\Python314\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Step 3 — Start the Celery worker
+Open a new terminal in `E:\Claude Projects\Apex\backend`:
+```powershell
+cd "E:\Claude Projects\Apex\backend"
+C:\Python314\python.exe -m celery -A app.core.celery_app worker -Q high,default,low --loglevel=info --pool=solo --logfile=celery_worker.log
+```
+> **Note:** `--pool=solo` is required on Windows. Do NOT use `--concurrency` without testing — billiard spawn pool crashes on Windows.
+
+### Step 4 — Get a JWT token
+```powershell
+cd "E:\Claude Projects\Apex\backend"
+# login.json contains: {"email":"swapneet.lahoti@gmail.com","password":"Apex2026!"}
+# (not committed to git — recreate if missing)
+echo '{"email":"swapneet.lahoti@gmail.com","password":"Apex2026!"}' > login.json
+curl.exe -s -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: application/json" --data-binary "@login.json"
+# Copy the access_token from the response
+```
+
+### Step 5 — Trigger batch classification of remaining signals
+```powershell
+$TOKEN = "paste_token_here"
+curl.exe -s -X POST http://localhost:8000/api/v1/signals/classify -H "Authorization: Bearer $TOKEN"
+# Returns: {"queued": N, "message": "Queued N signals for classification"}
+# N should be ~1420 (the ones not yet processed)
+```
+
+### Step 6 — Monitor progress
+```powershell
+# Watch the worker log
+Get-Content "E:\Claude Projects\Apex\backend\celery_worker.log" -Tail 20 -Wait
+# Look for: "DB updated: signal ... → type=X relevance=Y.YY"
+# And:      "embed_signal: signal ... embedded (1536 dims)"
+```
+
+### Step 7 — After classification completes, run Opportunity Predictor
+This is the next task to implement. Tell Claude:
+> "Signal classification is complete. Now implement and run the Opportunity Predictor pipeline — for each company that has signals with relevance_score >= 0.4, run OpportunityPredictorAgent (Claude Sonnet) and save predicted opportunities to the DB."
+
+---
+
+### Current DB State (as of 2026-04-21 session end)
+| Metric | Value |
+|--------|-------|
+| Total signals in DB | 1,446 |
+| Signals classified | ~26 |
+| Signals awaiting classification | ~1,420 |
+| Signals with embeddings | ~15 (the ones that passed gate) |
+| Opportunities | 0 (Opportunity Predictor not yet run) |
+| Actions | 0 (Action Generator not yet run) |
+
+### Key Files Changed This Session
+| File | What Changed |
+|------|-------------|
+| `backend/app/workers/ingest_signals.py` | Full live DB path: company lookup, asyncpg insert, dedup |
+| `backend/app/workers/classify_signals.py` | Full live DB path: load signal, Claude Haiku classify, DB update, OpenAI embed |
+| `backend/app/services/signal_service.py` | `trigger_ingest()` now dispatches real Celery task |
+| `backend/app/api/v1/signals.py` | Added `POST /signals/classify` endpoint |
+| `.gitignore` | Added login.json, ingest.json, celerybeat-schedule* exclusions |
 
 ---
 
