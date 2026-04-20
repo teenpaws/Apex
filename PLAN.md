@@ -889,7 +889,7 @@ curl http://localhost:8000/api/v1/signals
 
 **Goal:** Apex running on a real server (or local with production config) for the primary user.
 
-**Status:** ⏳ PENDING
+**Status:** ✅ COMPLETE — 2026-04-21
 
 **Pre-requisite:** Phase 10 complete ✅
 
@@ -898,16 +898,16 @@ curl http://localhost:8000/api/v1/signals
 **Agent: BE Deployment Agent (1 agent)**
 
 #### Tasks
-- [ ] Production `docker-compose.prod.yml`
-  - FastAPI with Gunicorn workers
-  - Celery worker + beat scheduler
-  - Redis
-  - Nginx reverse proxy
-- [ ] Environment separation: dev / staging / prod configs
-- [ ] Database: run migrations on prod Supabase project
-- [ ] Logging: structured JSON logs (all agents log decisions)
-- [ ] Health checks: all services have `/health` endpoints
-- [ ] Create startup checklist in README
+- [x] Production `docker-compose.prod.yml`
+  - FastAPI with Gunicorn workers ✅
+  - Celery worker + beat scheduler ✅
+  - Redis ✅
+  - Nginx reverse proxy ✅
+- [x] Environment separation: ENVIRONMENT flag (development/staging/production), ALLOWED_ORIGINS, JSON_LOGS
+- [x] Database: `backend/scripts/run_migrations.sh` — applies all 12 migrations in order
+- [x] Logging: structured JSON logs via `ApexJsonFormatter` (python-json-logger)
+- [x] Health checks: `/health` returns environment + version + mock_mode; Docker healthcheck on backend
+- [x] Create startup checklist in README
 
 #### Phase 11 Verification
 ```
@@ -938,7 +938,7 @@ curl http://localhost:8000/api/v1/signals
 | 8 | ✅ Complete | 3/3 | Email automation |
 | 9 | ✅ Complete | 4/4 | 253 BE tests + 45 Playwright E2E — all pass |
 | 10 | ✅ Complete | 3/3 | 79% BE coverage, fuzz+security tests, ErrorBoundary |
-| 11 | ⏳ Pending | 0/2 | |
+| 11 | ✅ Complete | 2/2 | Docker stack, JSON logging, README — 2026-04-21 |
 
 **Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions.
 
