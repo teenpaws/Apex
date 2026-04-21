@@ -1075,6 +1075,34 @@ After fit + positioning, run `ActionGeneratorAgent` (Claude Haiku):
 
 ---
 
+### Note: Agent Prompt v2 — Required Before v1.5 / Multi-User Expansion
+
+> **Current state (v1.0):** The three agent prompts rewritten in Sprint 13.2
+> (`signal_classifier_v1.txt`, `opportunity_predictor_v1.txt`, `career_fit_scorer_v1.txt`)
+> are intentionally hardcoded to the HEC Paris MBA persona — specific target sectors
+> (Consulting, PE, Tech, FinServ), role archetypes, scoring anchors, and few-shot examples
+> reflect a single known user. This is the right call for v1.0: specificity improves output
+> quality for the current user at zero extra cost.
+>
+> **The problem at v1.5:** When the platform expands to an MBA cohort or broader market,
+> these hardcoded assumptions break. A user targeting healthcare or public sector will get
+> miscalibrated relevance scores and irrelevant role predictions.
+>
+> **What v2 prompts must do differently:**
+> - Remove all hardcoded persona details (sectors, role archetypes, scoring examples)
+> - Inject ALL user context dynamically from `career_profiles` at call time (target industries,
+>   target roles, aspirations_text, seniority level, geography)
+> - Signal classifier: relevance scoring rubric derived from user profile, not baked into prompt
+> - Opportunity predictor: archetype table generated from user's target roles, not a fixed list
+> - Career fit scorer: dimension weights adjustable per user (e.g. geography matters more for
+>   some users than others)
+> - Requires a prompt-builder layer (not a static .txt file) — likely a Jinja2 template or
+>   Python f-string builder that assembles the system prompt from profile data
+>
+> **Target version:** v1.5 (before cohort launch). Do not ship multi-user without this.
+
+---
+
 ## Phase 14: Post-MVP Enhancements
 
 **Goal:** Upgrade signal processing throughput, add real job market grounding to opportunities, build FE pipeline visibility, and make the codebase shareable/launchable.

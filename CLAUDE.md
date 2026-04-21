@@ -482,6 +482,7 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | Rate limiting middleware (100 req/min/user) | Single user in v1.0 | v1.5 |
 | Full analytics page (funnels, response rate charts) | Needs historical data to be useful | v1.5 |
 | Agent prompt A/B testing framework | Overkill for single user | v2.0 |
+| Agent prompt v2 — generalised, user-agnostic versions | v1.0 prompts are hardcoded for HEC Paris MBA persona (specific sectors, role archetypes, scoring anchors). Works perfectly for single-user v1.0 but cannot scale to a cohort or broader market without prompt generalisation. v2 prompts must inject all persona context dynamically from the user's career profile, with no hardcoded assumptions. See PLAN.md "Agent Prompt v2" note. | v1.5 |
 | Celery Flower monitoring dashboard | Nice-to-have ops tooling | v1.5 |
 | Multi-user RLS policy audit | Architecture is cohort-ready but untested at scale | v1.5 |
 | PDL rate limit queue (dedicated priority lane) | Low volume in v1.0 | v1.5 |
