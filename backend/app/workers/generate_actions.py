@@ -113,6 +113,110 @@ def _mock_store_positioning(opportunity_id: str, positioning: dict) -> None:
     )
 
 
+# ── Live DB helpers ────────────────────────────────────────────────────────────
+
+def _parse_due_date(due_str: str):
+    """Convert '+3d' / '+1w' style strings to an absolute UTC datetime."""
+    from datetime import datetime, timezone, timedelta  # noqa: PLC0415
+    now = datetime.now(tz=timezone.utc)
+    s = due_str.strip().lstrip("+")
+    if s.endswith("d"):
+        return now + timedelta(days=int(s[:-1]))
+    if s.endswith("w"):
+        return now + timedelta(weeks=int(s[:-1]))
+    return now + timedelta(days=7)
+
+
+async def _live_load_opportunity_full(opportunity_id: str, user_id: str) -> dict[str, Any]:
+    """Load full opportunity context for ActionGeneratorAgent."""
+    import asyncpg  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+    try:
+        opp_row = await conn.fetchrow(
+            """
+            SELECT o.predicted_role, o.confidence, o.timeline_weeks, o.why_fit,
+                   o.positioning_notes, o.fit_score, o.company_id,
+                   c.name AS company_name
+            FROM opportunities o
+            LEFT JOIN companies c ON c.id = o.company_id
+            WHERE o.id = $1 AND o.user_id = $2
+            """,
+            _uuid.UUID(opportunity_id),
+            _uuid.UUID(user_id),
+        )
+        profile_row = await conn.fetchrow(
+            "SELECT current_role, aspirations_text FROM career_profiles WHERE user_id = $1",
+            _uuid.UUID(user_id),
+        )
+    finally:
+        await conn.close()
+
+    if not opp_row:
+        raise ValueError(f"Opportunity {opportunity_id} not found for user {user_id}")
+
+    return {
+        "opportunity": {
+            "predicted_role": opp_row["predicted_role"] or "",
+            "confidence": opp_row["confidence"],
+            "timeline_weeks": opp_row["timeline_weeks"] or 8,
+            "why_fit": opp_row["why_fit"] or "",
+            "ideal_contact_title": "",
+            "company_name": opp_row["company_name"] or "",
+        },
+        "fit_score": float(opp_row["fit_score"] or 50.0),
+        "company_id": str(opp_row["company_id"]) if opp_row["company_id"] else None,
+        "contacts": [],
+        "user_profile": {
+            "current_role": profile_row["current_role"] if profile_row else "",
+            "aspirations_text": profile_row["aspirations_text"] if profile_row else "",
+            "skills": [],
+            "career_history_summary": "",
+        },
+        "company_signals": [],
+    }
+
+
+async def _live_store_actions(
+    user_id: str,
+    company_id: str | None,
+    opportunity_id: str,
+    actions: list[dict],
+) -> None:
+    """INSERT generated action items into the actions table."""
+    import asyncpg  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    if not actions:
+        return
+
+    conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+    try:
+        for action in actions:
+            due_date = _parse_due_date(action.get("due_date", "+7d"))
+            await conn.execute(
+                """
+                INSERT INTO actions (
+                    id, user_id, opportunity_id, company_id,
+                    title, type, priority, status, due_date, ai_draft_json, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'TODO', $8, '{}', NOW())
+                """,
+                _uuid.uuid4(),
+                _uuid.UUID(user_id),
+                _uuid.UUID(opportunity_id),
+                _uuid.UUID(company_id) if company_id else None,
+                action.get("title", "")[:200],
+                action.get("type", "OUTREACH"),
+                action.get("priority", "MEDIUM"),
+                due_date,
+            )
+    finally:
+        await conn.close()
+
+
 # ── Tasks ──────────────────────────────────────────────────────────────────────
 
 @celery_app.task(
@@ -154,9 +258,7 @@ def generate_actions_for_opportunity(
         if settings.USE_MOCK_DATA:
             ctx = _load_mock_opportunity_full(opportunity_id, user_id)
         else:
-            raise NotImplementedError(
-                "Live DB reads not yet wired — set USE_MOCK_DATA=true"
-            )
+            ctx = await _live_load_opportunity_full(opportunity_id, user_id)
 
         # 2. Run agent
         agent = ActionGeneratorAgent(settings=settings)
@@ -171,12 +273,11 @@ def generate_actions_for_opportunity(
 
         # 3. Store actions
         actions_as_dicts = [a.model_dump(mode="json") for a in output.actions]
+        company_id = ctx.get("company_id")
         if settings.USE_MOCK_DATA:
             _mock_store_actions(user_id, opportunity_id, actions_as_dicts)
         else:
-            raise NotImplementedError(
-                "Live DB writes not yet wired — set USE_MOCK_DATA=true"
-            )
+            await _live_store_actions(user_id, company_id, opportunity_id, actions_as_dicts)
 
         logger.info(
             "generate_actions_for_opportunity: opp=%s → %d actions stored",

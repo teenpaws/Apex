@@ -86,6 +86,61 @@ async def get_opportunity(
 
 
 @router.post(
+    "/predict",
+    summary="Trigger opportunity prediction",
+    description=(
+        "Finds all companies that have classified signals with relevance >= 0.4 "
+        "and queues OpportunityPredictorAgent for each. Chains automatically into "
+        "CareerFitScorer → ActionGenerator. Returns count of companies queued."
+    ),
+)
+async def trigger_predict(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    import asyncpg  # noqa: PLC0415
+    import uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+    from app.workers.predict_opportunities import predict_for_company  # noqa: PLC0415
+
+    db_url = get_asyncpg_db_url()
+    conn = await asyncpg.connect(db_url, statement_cache_size=0)
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT company_id
+            FROM signals
+            WHERE user_id = $1
+              AND processed_at IS NOT NULL
+              AND relevance_score >= 0.4
+              AND is_duplicate = false
+              AND company_id IS NOT NULL
+            """,
+            uuid.UUID(current_user["id"]),
+        )
+        company_ids = [str(r["company_id"]) for r in rows]
+    finally:
+        await conn.close()
+
+    if not company_ids:
+        return {
+            "queued": 0,
+            "message": "No companies with relevant classified signals — run signal classification first",
+        }
+
+    for company_id in company_ids:
+        predict_for_company.apply_async(
+            args=[current_user["id"], company_id],
+            queue="default",
+        )
+
+    return {
+        "queued": len(company_ids),
+        "company_ids": company_ids,
+        "message": f"Queued opportunity prediction for {len(company_ids)} companies. Pipeline: predict → fit score → actions.",
+    }
+
+
+@router.post(
     "/{opportunity_id}/refresh",
     summary="Re-score opportunity",
     description=(

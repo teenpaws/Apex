@@ -124,6 +124,170 @@ def _mock_update_opportunity_fit(opportunity_id: str, fit_score: float) -> None:
     )
 
 
+# ── Live DB helpers ────────────────────────────────────────────────────────────
+
+async def _live_load_company_context(user_id: str, company_id: str) -> dict[str, Any]:
+    """Load company signals + user career profile from Supabase."""
+    import asyncpg  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+    try:
+        company_row = await conn.fetchrow(
+            "SELECT name FROM companies WHERE id = $1",
+            _uuid.UUID(company_id),
+        )
+        signal_rows = await conn.fetch(
+            """
+            SELECT id, type, title, description, signal_date, relevance_score
+            FROM signals
+            WHERE company_id = $1 AND user_id = $2
+              AND processed_at IS NOT NULL AND relevance_score >= 0.4
+              AND is_duplicate = false
+            ORDER BY relevance_score DESC
+            LIMIT 10
+            """,
+            _uuid.UUID(company_id),
+            _uuid.UUID(user_id),
+        )
+        profile_row = await conn.fetchrow(
+            """
+            SELECT current_role, target_roles, industries, aspirations_text
+            FROM career_profiles WHERE user_id = $1
+            """,
+            _uuid.UUID(user_id),
+        )
+    finally:
+        await conn.close()
+
+    return {
+        "company_name": company_row["name"] if company_row else "Unknown",
+        "signals": [
+            {
+                "signal_id": str(r["id"]),
+                "signal_type": r["type"],
+                "title": r["title"] or "",
+                "description": r["description"] or "",
+                "signal_date": r["signal_date"].isoformat() if r["signal_date"] else "",
+                "relevance_score": float(r["relevance_score"] or 0.0),
+            }
+            for r in signal_rows
+        ],
+        "user_profile": {
+            "current_role": profile_row["current_role"] or "" if profile_row else "",
+            "target_roles": list(profile_row["target_roles"] or []) if profile_row else [],
+            "industries": list(profile_row["industries"] or []) if profile_row else [],
+            "aspirations_text": profile_row["aspirations_text"] or "" if profile_row else "",
+            "skills": [],
+        },
+    }
+
+
+async def _live_store_opportunity(
+    user_id: str,
+    company_id: str,
+    output: Any,
+) -> str:
+    """INSERT a new opportunity row and return its UUID string."""
+    import asyncpg  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    opportunity_id = str(_uuid.uuid4())
+    conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO opportunities (
+                id, user_id, company_id, predicted_role, confidence,
+                timeline_weeks, why_fit, positioning_notes,
+                status, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PREDICTED', NOW(), NOW())
+            """,
+            _uuid.UUID(opportunity_id),
+            _uuid.UUID(user_id),
+            _uuid.UUID(company_id),
+            output.predicted_role,
+            output.confidence,
+            output.timeline_weeks,
+            output.why_fit,
+            output.positioning_notes,
+        )
+    finally:
+        await conn.close()
+    return opportunity_id
+
+
+async def _live_load_opportunity_for_scoring(
+    opportunity_id: str,
+    user_id: str,
+) -> dict[str, Any]:
+    """Load opportunity + user profile for CareerFitScorerAgent."""
+    import asyncpg  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+    try:
+        opp_row = await conn.fetchrow(
+            """
+            SELECT predicted_role, confidence, why_fit, positioning_notes
+            FROM opportunities WHERE id = $1 AND user_id = $2
+            """,
+            _uuid.UUID(opportunity_id),
+            _uuid.UUID(user_id),
+        )
+        profile_row = await conn.fetchrow(
+            """
+            SELECT current_role, target_roles, industries, aspirations_text
+            FROM career_profiles WHERE user_id = $1
+            """,
+            _uuid.UUID(user_id),
+        )
+    finally:
+        await conn.close()
+
+    return {
+        "opp_data": {
+            "predicted_role": opp_row["predicted_role"] or "" if opp_row else "",
+            "confidence": opp_row["confidence"] if opp_row else "SPECULATIVE",
+            "why_fit": opp_row["why_fit"] or "" if opp_row else "",
+            "positioning_notes": opp_row["positioning_notes"] or "" if opp_row else "",
+        },
+        "profile_data": {
+            "current_role": profile_row["current_role"] or "" if profile_row else "",
+            "target_roles": list(profile_row["target_roles"] or []) if profile_row else [],
+            "industries": list(profile_row["industries"] or []) if profile_row else [],
+            "aspirations_text": profile_row["aspirations_text"] or "" if profile_row else "",
+            "skills": [],
+            "embedding_summary": "",
+        },
+    }
+
+
+async def _live_update_fit_score(
+    opportunity_id: str,
+    user_id: str,
+    fit_score: float,
+) -> None:
+    """UPDATE opportunities.fit_score after CareerFitScorer runs."""
+    import asyncpg  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+    try:
+        await conn.execute(
+            "UPDATE opportunities SET fit_score = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
+            fit_score,
+            _uuid.UUID(opportunity_id),
+            _uuid.UUID(user_id),
+        )
+    finally:
+        await conn.close()
+
+
 # ── Tasks ──────────────────────────────────────────────────────────────────────
 
 @celery_app.task(
@@ -166,9 +330,7 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
         if settings.USE_MOCK_DATA:
             ctx = _load_mock_company_context(user_id, company_id)
         else:
-            raise NotImplementedError(
-                "Live DB reads not yet wired — set USE_MOCK_DATA=true"
-            )
+            ctx = await _live_load_company_context(user_id, company_id)
 
         # 2. Build input and run agent
         agent = OpportunityPredictorAgent(settings=settings)
@@ -187,9 +349,7 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
                 user_id, company_id, output.model_dump(mode="json")
             )
         else:
-            raise NotImplementedError(
-                "Live DB writes not yet wired — set USE_MOCK_DATA=true"
-            )
+            opportunity_id = await _live_store_opportunity(user_id, company_id, output)
 
         # 4. Queue fit scoring
         logger.info(
@@ -260,9 +420,9 @@ def score_opportunity_fit(self, user_id: str, opportunity_id: str) -> dict[str, 
             opp_data = _load_mock_opportunity(opportunity_id, user_id)
             profile_data = _load_mock_company_context(user_id, "mock")["user_profile"]
         else:
-            raise NotImplementedError(
-                "Live DB reads not yet wired — set USE_MOCK_DATA=true"
-            )
+            ctx = await _live_load_opportunity_for_scoring(opportunity_id, user_id)
+            opp_data = ctx["opp_data"]
+            profile_data = ctx["profile_data"]
 
         # 2. Run agent
         agent = CareerFitScorerAgent(settings=settings)
@@ -283,12 +443,17 @@ def score_opportunity_fit(self, user_id: str, opportunity_id: str) -> dict[str, 
         if settings.USE_MOCK_DATA:
             _mock_update_opportunity_fit(opportunity_id, output.fit_score)
         else:
-            raise NotImplementedError(
-                "Live DB writes not yet wired — set USE_MOCK_DATA=true"
-            )
+            await _live_update_fit_score(opportunity_id, user_id, output.fit_score)
+
+        # 4. Chain to action generation
+        from app.workers.generate_actions import generate_actions_for_opportunity  # noqa: PLC0415
+        generate_actions_for_opportunity.apply_async(
+            args=[user_id, opportunity_id],
+            queue="default",
+        )
 
         logger.info(
-            "score_opportunity_fit: opp=%s fit_score=%.1f gaps=%s",
+            "score_opportunity_fit: opp=%s fit_score=%.1f gaps=%s → queued action generation",
             opportunity_id,
             output.fit_score,
             output.skill_gaps,
