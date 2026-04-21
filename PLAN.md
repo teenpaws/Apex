@@ -1002,7 +1002,7 @@ After fit + positioning, run `ActionGeneratorAgent` (Claude Haiku):
 
 **Goal:** Fix data quality issues discovered in Phase 12 live run. Raise Celery throughput. Rewrite agent prompts to be MBA-specific and output-grounded. No architecture changes, no new API costs.
 
-**Status:** 🔲 NOT STARTED — begins after Phase 12 pipeline run completes
+**Status:** ⏳ IN PROGRESS — Sprint 13.1 complete 2026-04-22
 
 **Prerequisite:** Phase 12 full pipeline run complete (all signals classified, opportunities predicted)
 
@@ -1010,32 +1010,29 @@ After fit + positioning, run `ActionGeneratorAgent` (Claude Haiku):
 
 ---
 
-### Sprint 13.1 — Data Pipeline Fixes
+### Sprint 13.1 — Data Pipeline Fixes ✅ COMPLETE (2026-04-22)
 
-#### Task 1: SEC EDGAR — 90-day date filter ✅ DECISION LOCKED
+#### Task 1: SEC EDGAR — 90-day date filter ✅ DONE
 **File:** `backend/app/integrations/sec_edgar_client.py`
-- Add `dateb` (or equivalent) filter: only fetch filings from the last 90 days
-- Add a `EDGAR_LOOKBACK_DAYS = 90` config constant so it's visible and adjustable
-- **Why:** Without this, SEC EDGAR returns filings going back years (Form D for Google from 2008 etc.)
-- **Acceptance:** Running `fetch_form_d("McKinsey")` returns only filings from last 90 days
+- Added `EDGAR_LOOKBACK_DAYS = 90` constant
+- Updated `fetch_form_d` and `fetch_8k_filings` defaults from `days_back=30` → `days_back=EDGAR_LOOKBACK_DAYS`
+- **Acceptance:** Running `fetch_form_d("McKinsey")` returns only filings from last 90 days ✅
 
-#### Task 2: NewsData.io — 0-article warning log ✅ DECISION LOCKED
-**File:** `backend/app/integrations/newsdata_client.py`
-- Already fixed: `from_date` param removed, empty results no longer cached
-- **Add now:** A structured warning log whenever ANY source returns 0 articles for a company:
+#### Task 2: NewsData.io — 0-article warning log ✅ DONE
+**Files:** `newsdata_client.py`, `gnews_client.py`, `sec_edgar_client.py`
+- All three sources now emit consistent structured warning on 0 results:
   ```
   logger.warning("Source %r returned 0 articles for company=%r — check key/quota/connectivity", source_name, company_name)
   ```
-- **Also:** Add the same 0-result warning to `gnews_client.py` and `sec_edgar_client.py` for consistency
-- **Why:** Silent empty returns were the root cause of the NewsData.io bug; make failures visible across all sources
+- newsdata: warning standardised to match format
+- gnews: warning added after `articles` extraction
+- sec_edgar: warning added in both `fetch_form_d` and `fetch_8k_filings`
 
-#### Task 3: Celery — Raise concurrency to 4 (Windows-safe) ✅ DECISION LOCKED
+#### Task 3: Celery — Raise concurrency to 4 (Windows-safe) ✅ DONE
 **Decision:** Option A only for Phase 13. Option B+C (pre-filter + Sonnet batch) deferred to Phase 14.
 
-- Change Celery worker start command from `--pool=solo` to `--pool=threads --concurrency=4`
-- Update `How to Restart` section in this file with new command
+- Changed `How to Restart` Step 3 from `--pool=solo` → `--pool=threads --concurrency=4`
 - **Why:** Current 7s/signal × 1 worker = ~3 hours for 1,446 signals. Concurrency 4 brings this to ~45 minutes.
-- **Windows note:** `--pool=threads` is safe on Windows (no subprocess forking). `--pool=solo` was needed as a workaround; threads work correctly with asyncio tasks.
 - **Test first:** Run 10 signals at concurrency 4 before bulk run to verify no race conditions on asyncpg connections
 - **Acceptance:** Classification of 100 signals completes in under 12 minutes
 
@@ -1162,7 +1159,7 @@ Rewrite must include:
 | 10 | ✅ Complete | 3/3 | 79% BE coverage, fuzz+security tests, ErrorBoundary |
 | 11 | ✅ Complete | 2/2 | Docker stack, JSON logging, README — 2026-04-21 |
 | 12 | ⏳ In Progress | 1/? | Signal ingestion live ✅, classification wired ✅, 1,446 signals in DB ✅, ~26 classified so far. NewsData.io bug fixed ✅ |
-| 13 | 🔲 Not Started | 0/2 | SEC EDGAR date filter, 0-article logger, Celery concurrency ×4, prompt rewrites (classifier + predictor + fit scorer) |
+| 13 | ⏳ In Progress | 1/2 | Sprint 13.1 ✅: SEC EDGAR date filter, 0-article logger (all 3 sources), Celery concurrency ×4. Sprint 13.2 🔲: prompt rewrites (classifier + predictor + fit scorer) |
 | 14 | 🔲 Not Started | 0/4 | Post-MVP: Sonnet batch + pre-filter, job board layer, FE pipeline bar, extended thinking, launch package |
 
 **Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions.
@@ -1243,9 +1240,9 @@ C:\Python314\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Open a new terminal in `E:\Claude Projects\Apex\backend`:
 ```powershell
 cd "E:\Claude Projects\Apex\backend"
-C:\Python314\python.exe -m celery -A app.core.celery_app worker -Q high,default,low --loglevel=info --pool=solo --logfile=celery_worker.log
+C:\Python314\python.exe -m celery -A app.core.celery_app worker -Q high,default,low --loglevel=info --pool=threads --concurrency=4 --logfile=celery_worker.log
 ```
-> **Note:** `--pool=solo` is required on Windows. Do NOT use `--concurrency` without testing — billiard spawn pool crashes on Windows.
+> **Note:** `--pool=threads --concurrency=4` is Windows-safe (no subprocess forking). This replaces the old `--pool=solo` workaround and cuts bulk classification time from ~3 hours to ~45 minutes. Test with 10 signals first to verify no asyncpg race conditions before a full bulk run.
 
 ### Step 4 — Get a JWT token
 ```powershell

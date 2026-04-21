@@ -147,6 +147,12 @@ class GNewsClient:
             return []
 
         articles: list[dict] = payload.get("articles", []) or []
+        if not articles:
+            logger.warning(
+                "Source %r returned 0 articles for company=%r — check key/quota/connectivity",
+                "gnews",
+                company_name,
+            )
         logger.info(
             "GNews fetched %d articles for company=%r",
             len(articles),

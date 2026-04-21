@@ -229,7 +229,8 @@ class NewsDataClient:
             _cache_set(redis, cache_key, articles)
         else:
             logger.warning(
-                "NewsData.io returned 0 articles for company=%r (not cached)",
+                "Source %r returned 0 articles for company=%r — check key/quota/connectivity",
+                "newsdata",
                 company_name,
             )
 

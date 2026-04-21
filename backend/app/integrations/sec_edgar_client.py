@@ -37,6 +37,9 @@ SEC_SEARCH_BASE = "https://efts.sec.gov/LATEST/search-index"
 # Seconds between consecutive SEC API calls to stay within 10 req/s limit.
 SEC_RATE_LIMIT_SLEEP = 0.12
 
+# Only fetch filings from the last N days — prevents pulling multi-year history.
+EDGAR_LOOKBACK_DAYS = 90
+
 # Keywords in 8-K filing titles/descriptions that suggest exec changes vs M&A.
 EXEC_HIRE_KEYWORDS = re.compile(
     r"\b(appoint|officer|director|ceo|cfo|coo|cto|president|hire|named|elected)\b",
@@ -161,7 +164,7 @@ class SECEdgarClient:
     async def fetch_form_d(
         self,
         company_name: str,
-        days_back: int = 30,
+        days_back: int = EDGAR_LOOKBACK_DAYS,
     ) -> list[SignalEvent]:
         """
         Fetch Form D filings (private funding rounds) for *company_name*.
@@ -201,6 +204,12 @@ class SECEdgarClient:
                 )
             )
 
+        if not events:
+            logger.warning(
+                "Source %r returned 0 articles for company=%r — check key/quota/connectivity",
+                "sec_edgar_form_d",
+                company_name,
+            )
         logger.info(
             "SEC EDGAR Form D: %d filings for company=%r",
             len(events),
@@ -211,7 +220,7 @@ class SECEdgarClient:
     async def fetch_8k_filings(
         self,
         company_name: str,
-        days_back: int = 30,
+        days_back: int = EDGAR_LOOKBACK_DAYS,
     ) -> list[SignalEvent]:
         """
         Fetch 8-K filings (material events) for *company_name*.
@@ -254,6 +263,12 @@ class SECEdgarClient:
                 )
             )
 
+        if not events:
+            logger.warning(
+                "Source %r returned 0 articles for company=%r — check key/quota/connectivity",
+                "sec_edgar_8k",
+                company_name,
+            )
         logger.info(
             "SEC EDGAR 8-K: %d filings for company=%r",
             len(events),
