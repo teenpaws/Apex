@@ -16,7 +16,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -179,7 +179,7 @@ class NewsDataClient:
         redis = _redis_client()
 
         cached = _cache_get(redis, cache_key)
-        if cached is not None:
+        if cached:
             logger.debug(
                 "NewsData cache HIT for company=%r days_back=%d (%d articles)",
                 company_name,
@@ -188,15 +188,10 @@ class NewsDataClient:
             )
             return _articles_to_events(cached, company_name)
 
-        from_date = (
-            datetime.now(tz=timezone.utc) - timedelta(days=days_back)
-        ).strftime("%Y-%m-%d")
-
         params: dict[str, str] = {
             "apikey": self._settings.NEWSDATA_API_KEY,
             "q": company_name,
             "language": "en",
-            "from_date": from_date,
         }
 
         try:
@@ -230,7 +225,13 @@ class NewsDataClient:
             return []
 
         articles: list[dict] = payload.get("results", []) or []
-        _cache_set(redis, cache_key, articles)
+        if articles:
+            _cache_set(redis, cache_key, articles)
+        else:
+            logger.warning(
+                "NewsData.io returned 0 articles for company=%r (not cached)",
+                company_name,
+            )
 
         logger.info(
             "NewsData.io fetched %d articles for company=%r",

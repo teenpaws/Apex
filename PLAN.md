@@ -936,6 +936,20 @@ curl http://localhost:8000/api/v1/signals
 - `_persist_events`: fully rewritten with raw asyncpg, omits `embedding` column (pgvector-python not needed), dedup via SHA-256 hash
 - `signal_service.py`: `trigger_ingest()` now dispatches real Celery tasks via `apply_async`
 - **Result: 1,446 real signals in DB** from NewsData.io, GNews, SEC EDGAR (Form D + 8-K filings)
+- **NOTE (discovered 2026-04-21):** All 1,446 signals were from GNews + SEC EDGAR only — NewsData.io produced 0 due to bugs fixed in Session 2 (see below)
+
+#### Bug Fix — NewsData.io Silent Failure (Session 2 — 2026-04-21) ✅
+**Root cause (two stacked bugs):**
+1. `newsdata_client.py` was sending `from_date` in every request. The `/1/news` endpoint returns HTTP 422 `UnsupportedParameter` for this param — date filtering is a paid-only feature on `/1/archive`. Every call silently failed.
+2. The empty `[]` result from the 422 error was being cached in Redis for 24h (`_cache_set` was called unconditionally). Every subsequent call returned the cached `[]` without hitting the API — explaining 0 hits on the NewsData.io portal.
+
+**Fixes applied to `backend/app/integrations/newsdata_client.py`:**
+- Removed `from_date` param from the request (the API returns recent news by default)
+- `_cache_set` now only called when `articles` is non-empty (prevents caching error responses)
+- Cache-hit check changed from `if cached is not None` → `if cached` (empty list no longer treated as a valid hit)
+- Removed unused `timedelta` import
+
+**Verified:** Direct API call without `from_date` returns HTTP 200 + 10 articles for "McKinsey".
 
 #### Signal Classification — WIRED + RUNNING ✅
 - `classify_signals.py`: live DB path fully wired
