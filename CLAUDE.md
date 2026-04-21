@@ -526,6 +526,16 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-12 | NewsAPI.org replaced | Free tier is localhost-only and cannot be deployed. Replaced with NewsData.io (200/day free, commercial use OK, no delay). |
 | 2026-04-12 | Dealroom dropped for v1.0 | €6k+/year. EU funding rounds announced in press — NewsData.io + RSS captures these adequately. Can revisit for v2.0. |
 | 2026-04-12 | Hunter.io added | Email discovery by company domain + first/last name. 25 free/month covers personal-scale outreach well. |
+| 2026-04-21 | NewsData.io `from_date` param removed | `/1/news` endpoint returns HTTP 422 for `from_date` — date filtering is paid-only on `/1/archive`. Param removed; recent news returned by default. Empty results no longer cached. |
+| 2026-04-21 | SEC EDGAR 90-day lookback filter | Without date filter, EDGAR returns filings going back years. Phase 13 adds `EDGAR_LOOKBACK_DAYS = 90` filter to `sec_edgar_client.py`. |
+| 2026-04-21 | Celery concurrency raised to 4 (`--pool=threads`) | Solo pool (concurrency 1) processes 1,446 signals in ~3 hours. Threads pool at 4 brings this to ~45 min. Windows-safe: threads, not spawn. Phase 13. |
+| 2026-04-21 | Signal classification: Haiku 1/call for Phase 13 (MVP) | Option B (batch) and Option C (pre-filter) deferred to Phase 14. For MVP, Option A (concurrency) is zero-accuracy-impact, zero-cost-impact, fast to implement. |
+| 2026-04-21 | Phase 14: Option B+C combo for signal processing | Pre-filter noise first (keyword rules, ~40-60% reduction), then batch classify with Sonnet at 10 signals/call. ~$2.50 vs $0.65 for full run — acceptable quality/cost tradeoff. Post-MVP only. |
+| 2026-04-21 | Agent prompts: MBA-specific rewrites in Phase 13 (no extended thinking yet) | Generic prompts produce generic outputs. Rewrites add user aspiration context, MBA role archetypes, few-shot examples, citation requirements. No extended thinking for MVP (cost + complexity). Extended thinking (Sonnet, `budget_tokens=8000`) enabled in Phase 14. |
+| 2026-04-21 | Opportunities: prompt-grounded for Phase 13, job board layer in Phase 14 | Phase 13 adds signal citation requirements and MBA role archetypes to predictor prompt. Phase 14 adds Adzuna API validation layer — predictions backed by real open postings get VALIDATED badge; unmatched stay PREDICTED. |
+| 2026-04-21 | FE pipeline progress bar deferred to Phase 14 | Polling-based (`GET /agents/run-status` every 2s). Supabase Realtime upgrade in v1.5. Phase 14 after full pipeline run is stable. |
+| 2026-04-21 | Shareable launch package deferred to Phase 14 | Docker stack from Phase 11 is the foundation. Phase 14 adds `start.sh`, `QUICKSTART.md`, `.devcontainer/devcontainer.json`, and demo seed data. |
+| 2026-04-21 | OpenAI embeddings: keep as-is | `text-embedding-3-small` costs ~$0.01 for entire 1,446-signal corpus. Replacing with local model adds complexity for negligible saving. Not re-litigated. |
 
 ---
 
