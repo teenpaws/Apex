@@ -1002,7 +1002,7 @@ After fit + positioning, run `ActionGeneratorAgent` (Claude Haiku):
 
 **Goal:** Fix data quality issues discovered in Phase 12 live run. Raise Celery throughput. Rewrite agent prompts to be MBA-specific and output-grounded. No architecture changes, no new API costs.
 
-**Status:** ⏳ IN PROGRESS — Sprint 13.1 complete 2026-04-22
+**Status:** ✅ COMPLETE — Sprint 13.1 + 13.2 done 2026-04-22
 
 **Prerequisite:** Phase 12 full pipeline run complete (all signals classified, opportunities predicted)
 
@@ -1038,46 +1038,40 @@ After fit + positioning, run `ActionGeneratorAgent` (Claude Haiku):
 
 ---
 
-### Sprint 13.2 — Agent Prompt Rewrites
+### Sprint 13.2 — Agent Prompt Rewrites ✅ COMPLETE (2026-04-22)
 
-**Constraint:** These are prompt-only changes. No model swaps, no new tools, no architecture changes. System prompts use existing prompt caching (already in `base_agent.py`) — repeated calls are free after first cache warm.
+**Constraint:** Prompt-only changes. No model swaps, no new tools, no architecture changes.
 
-#### Task 4: Rewrite Signal Classifier Prompt ✅ DECISION LOCKED
-**File:** `backend/app/agents/prompts/signal_classifier_v1.txt` (or equivalent)
+#### Task 4: Rewrite Signal Classifier Prompt ✅ DONE
+**File:** `backend/app/agents/prompts/signal_classifier_v1.txt`
 **Target:** Claude Haiku
 
-Current problem: Generic prompt produces middle-of-road relevance scores and misclassifies ambiguous signals.
+- Added HEC Paris MBA framing with target sectors (Consulting, PE, Tech, FinServ) and role types
+- 8 signal type definitions each with a concrete example article title
+- 6-tier relevance scoring rubric calibrated to MBA business-building signals
+- 3 full few-shot examples: HIGH (FUNDING/Mistral AI), MEDIUM (EXPANSION/Schneider), LOW (EARNINGS/Toyota)
+- Do-not-classify rule: relevance_score 0.1 + fixed reasoning for short/context-free signals
 
-Rewrite must include:
-- **User context in system prompt (cached):** "You are classifying market signals for an HEC Paris MBA candidate targeting [user's target roles/industries from career profile]. A signal is highly relevant (0.8–1.0) if it directly suggests a business need for someone with an MBA in [industries]. It is low relevance (< 0.4) if unrelated to the candidate's target sectors."
-- **Signal type definitions with examples:** Each of the 8 types (FUNDING, EXEC_HIRE, etc.) with a 1-sentence definition and a concrete example article title
-- **3 few-shot examples:** Full input → output pairs showing a HIGH, MEDIUM, and LOW relevance signal with reasoning
-- **Strict output schema:** Force JSON via tool_use pattern (schema: `{type, relevance_score, reasoning, key_entities[]}`) — no free-form JSON string parsing
-- **Do-not-classify rule:** If signal text is too short or lacks company context, output `relevance_score: 0.1` with `reasoning: "insufficient signal content"`
-
-#### Task 5: Rewrite Opportunity Predictor Prompt ✅ DECISION LOCKED
+#### Task 5: Rewrite Opportunity Predictor Prompt ✅ DONE
 **File:** `backend/app/agents/prompts/opportunity_predictor_v1.txt`
 **Target:** Claude Sonnet
 
-Current problem: Outputs generic role titles not grounded in the actual signals or user profile. No citation of which signal justifies the prediction.
+- MBA role archetypes table: 8 archetypes mapped to signal types and seniority bands
+- Strict confidence rules (HIGH requires 2+ signals ≥ 0.7 including FUNDING/MA/CONTRACT)
+- Do-not-predict rule: single signal < 0.6 relevance → SPECULATIVE, full JSON still returned
+- Specificity requirement with ✗/✓ examples enforcing concrete titles
+- Citation requirement: `signal_citations: [{signal_id, key_quote}]` in every response
+- Timeline guidance per signal type (FUNDING: 4–8w, MA: 8–16w, EXEC_HIRE: 4–6w, etc.)
+- Aspiration alignment: conflicts with aspirations_text lower confidence by one level
 
-Rewrite must include:
-- **MBA role archetypes (system prompt, cached):** Define the 8–10 role types an MBA typically lands in (Strategy Manager, Corporate Development, BD Lead, VC/PE Analyst, Operations Lead, Chief of Staff, GM, Consulting Manager). Map each to the signal types that predict them (e.g. FUNDING → BD Lead, VC Analyst; EXEC_HIRE → Strategy Manager if VP-level hire; M&A → Corp Dev)
-- **User aspiration text (system prompt, cached):** Full text from `career_profiles.aspirations_text` injected into system prompt
-- **Citation requirement:** Output must include `signal_citations: [{signal_id, key_quote}]` — if no strong signal exists to cite, output `confidence: SPECULATIVE`
-- **Specificity gate:** Predicted role title must be specific (e.g. "Head of Strategy — Europe" not "Manager"). If specificity cannot be determined from signals, lower confidence to SPECULATIVE.
-- **Do-not-predict rule:** If company has only 1 signal and it's relevance < 0.6, skip prediction and return `{skip: true, reason: "..."}`
-
-#### Task 6: Rewrite Career Fit Scorer Prompt ✅ DECISION LOCKED
+#### Task 6: Rewrite Career Fit Scorer Prompt ✅ DONE
 **File:** `backend/app/agents/prompts/career_fit_scorer_v1.txt`
 **Target:** Claude Sonnet
 
-Current problem: Fit scores cluster around 50–70 without differentiation.
-
-Rewrite must include:
-- **MBA-specific fit dimensions (system prompt, cached):** Industry match (0–25 pts), role level fit (0–25 pts), skills alignment (0–25 pts), aspiration alignment (0–25 pts) — explicit rubric, not a single holistic score
-- **Anchor examples:** Score of 90+ = candidate has done this exact role, right industry, matches aspirations. Score of 50 = plausible stretch. Score < 30 = mismatch in at least 2 dimensions.
-- **Skill gap output:** Required field `skill_gaps: string[]` listing specific gaps — not "more experience needed" but "no PE/LBO modeling experience mentioned in profile"
+- 4-dimension rubric: Industry Match + Role Level Fit + Skills Alignment + Aspiration Alignment (0–25 pts each)
+- Anchor examples for absolute calibration: 95+ = lateral with upside, 75–85 = standard MBA, 55–65 = stretch, <30 = do not surface
+- Skill gaps rule with ✗/✓ examples enforcing specificity ("no LBO/PE modelling" not "needs more experience")
+- fit_explanation required to reference at least two dimensions by name
 
 ---
 
@@ -1159,7 +1153,7 @@ Rewrite must include:
 | 10 | ✅ Complete | 3/3 | 79% BE coverage, fuzz+security tests, ErrorBoundary |
 | 11 | ✅ Complete | 2/2 | Docker stack, JSON logging, README — 2026-04-21 |
 | 12 | ⏳ In Progress | 1/? | Signal ingestion live ✅, classification wired ✅, 1,446 signals in DB ✅, ~26 classified so far. NewsData.io bug fixed ✅ |
-| 13 | ⏳ In Progress | 1/2 | Sprint 13.1 ✅: SEC EDGAR date filter, 0-article logger (all 3 sources), Celery concurrency ×4. Sprint 13.2 🔲: prompt rewrites (classifier + predictor + fit scorer) |
+| 13 | ✅ Complete | 2/2 | Sprint 13.1 ✅: SEC EDGAR 90-day filter, 0-article logger, Celery ×4. Sprint 13.2 ✅: prompt rewrites (classifier + predictor + fit scorer) — all MBA-specific, grounded, cited |
 | 14 | 🔲 Not Started | 0/4 | Post-MVP: Sonnet batch + pre-filter, job board layer, FE pipeline bar, extended thinking, launch package |
 
 **Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions.
