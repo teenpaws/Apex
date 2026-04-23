@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-12 | Phase 2: COMPLETE ✅ | API Stack Audit: COMPLETE ✅ | Next: Phase 3 — Signal Intelligence Engine
+> Last updated: 2026-04-23 | Phase 13: COMPLETE ✅ | Phase 14: NOT STARTED | Next: Phase 14 — Post-MVP Enhancements
 
 ---
 
@@ -42,6 +42,8 @@ Apex is a multi-agent AI platform that gives job seekers — starting with MBA g
 | Signal Sources | NewsData.io, GNews API, RSS feeds, SEC EDGAR (data.sec.gov) | Market intelligence |
 | Auth | Supabase Auth (JWT) | Row-level security from day one |
 | Deployment | Docker + Docker Compose | Dev; production TBD |
+| File Storage | Supabase Storage | User-uploaded documents (resume, cover letters) — private bucket, user-scoped |
+| Document Parsing | pdfplumber + python-docx | Local PDF/DOCX text extraction — no API cost, runs in-process |
 
 ---
 
@@ -102,17 +104,34 @@ apex/
 **Users** (`user_id` scoped EVERYWHERE — cohort-ready from day one)
 ```
 users: id, email, full_name, profile_json, preferences_json, created_at
+
 career_profiles: id, user_id, current_role, target_roles[], industries[], 
-                 aspirations_text, embedding vector[1536], updated_at
+                 aspirations_text, embedding vector[1536], updated_at,
+                 -- Phase 15 additions (resume intelligence):
+                 years_of_experience int,            ← extracted from resume
+                 seniority_band text,                ← ANALYST|ASSOCIATE|MANAGER|DIRECTOR|VP_PLUS
+                 education_json jsonb,               ← [{degree, institution, year, field}]
+                 work_history_json jsonb,            ← [{company, title, start_year, end_year, summary}]
+                 key_achievements_json jsonb,        ← [{achievement, impact, context}]
+                 raw_resume_text text,               ← full extracted text for re-analysis
+                 profile_source text,                ← MANUAL | RESUME | BOTH
+                 last_analyzed_at timestamptz        ← when Profile Extractor last ran
+
+user_documents: id, user_id, filename, file_type,   ← Phase 15: document uploads
+                doc_type,                            ← RESUME | COVER_LETTER | OTHER
+                storage_url,                         ← Supabase Storage path
+                extracted_text,                      ← raw text extracted locally (no API cost)
+                target_context,                      ← user label: "PE firms", "tech startups" etc
+                extraction_status,                   ← PENDING | EXTRACTED | ANALYZED | FAILED
+                created_at
 ```
 
 **Companies & Contacts**
 ```
 companies: id, name, domain, industry, size_range, location, 
-           linkedin_url,                         ← ADDED: required for Proxycurl lookups
-           enrichment_json, last_enriched_at
+           linkedin_url, enrichment_json, last_enriched_at
 contacts: id, company_id, name, title, linkedin_url, email,
-          enrichment_json (Proxycurl), last_enriched_at
+          enrichment_json (PDL), last_enriched_at
 ```
 
 **Signals** (market intelligence raw data)
@@ -132,10 +151,12 @@ signal_types: FUNDING | EXEC_HIRE | EXPANSION | LAYOFF |
 opportunities: id, user_id, company_id, predicted_role, 
                confidence (HIGH/MEDIUM/SPECULATIVE),
                timeline_weeks int, why_fit text, 
-               positioning_notes text, predicted_salary_range,
-               fit_score float,                    ← ADDED: Career Fit Scorer output (0–100)
+               approach_angle text,                ← renamed from positioning_notes (Phase 14): 1-sentence seed for Positioning Advisor
+               predicted_salary_range,
+               fit_score float,                    ← Career Fit Scorer output (0–100)
                key_contact_id, signal_ids[], 
-               status (PREDICTED/APPROACHED/INTERVIEWING/CLOSED),
+               status (PREDICTED/VALIDATED/APPROACHED/INTERVIEWING/CLOSED),
+               real_postings jsonb,                ← Phase 14: [{title, url, company, posted_date}] from Adzuna
                created_at, updated_at
 ```
 
@@ -144,15 +165,18 @@ opportunities: id, user_id, company_id, predicted_role,
 actions: id, user_id, opportunity_id, company_id, contact_id,
          title, description, type (OUTREACH/FOLLOW_UP/RESEARCH/CALL),
          priority (HIGH/MEDIUM/LOW), status (TODO/IN_PROGRESS/DONE/SNOOZED),
-         due_date, source_signal_id, ai_draft_json, created_at
+         due_date, source_signal_id, ai_draft_json,
+         intended_effect text,                     ← Phase 16: AI-generated 1-sentence rationale
+         created_at
 ```
 
-**Outreach** (email drafts and sends)
+**Outreach** (email and LinkedIn message drafts)
 ```
 outreach_emails: id, user_id, action_id, contact_id,
                  subject, body, tone, draft_json,
+                 channel text DEFAULT 'EMAIL',      ← Phase 17: EMAIL | LINKEDIN
                  sent_at, gmail_message_id, opened_at, replied_at,
-                 reply_detected_at                 ← ADDED: for tracking response time metrics
+                 reply_detected_at                  ← for tracking response time metrics
 ```
 
 **Agent Runs** (audit trail for all AI agent invocations — REQUIRED)
@@ -180,13 +204,19 @@ agent_runs: id, user_id, agent_name, model_used,
 | Signal Classifier | Claude Haiku | Classify raw signals into types, score relevance (fast, cheap) | `agents/signal_classifier.py` |
 | Opportunity Predictor | Claude Sonnet | Analyze signals → predict hiring needs + timeline + ideal contact type | `agents/opportunity_predictor.py` |
 | Career Fit Scorer | Claude Sonnet | Score how well user's profile fits a predicted opportunity (0–100) | `agents/career_fit_scorer.py` |
-| Positioning Advisor | Claude Sonnet | Generate positioning narrative for user → company | `agents/positioning_advisor.py` |
-| Email Drafter | Claude Sonnet | Draft personalized outreach emails (3 tone variants) | `agents/email_drafter.py` |
-| Action Generator | Claude Haiku | Convert opportunities → prioritized action items | `agents/action_generator.py` |
+| Positioning Advisor | Claude Sonnet | Generate full positioning narrative for user → company (uses approach_angle seed from predictor) | `agents/positioning_advisor.py` |
+| Email Drafter | Claude Sonnet | Draft personalized outreach (3 email variants + LinkedIn message) | `agents/email_drafter.py` |
+| Action Generator | Claude Haiku | Convert opportunities → prioritized action items with intended_effect rationale | `agents/action_generator.py` |
+| Profile Extractor | Claude Sonnet | Extract structured profile fields from raw resume + cover letter text (Phase 15) | `agents/profile_extractor.py` |
 
 > **Note:** `Contact Identifier` was merged into `Opportunity Predictor`. The predictor now outputs
 > both the predicted role AND the ideal contact title/search query. This avoids a redundant agent
 > hop and reflects the tight coupling between these two outputs.
+
+> **Note:** `Opportunity Predictor` outputs `approach_angle` (renamed from `positioning_notes`) — a
+> single-sentence strategic hint (e.g. "Lead with your PE ops experience"). The `Positioning Advisor`
+> reads this seed and builds the full narrative. The predictor does NOT own positioning; it only
+> provides the angle for the advisor to elaborate on.
 
 ### Agent Registry
 All agents are registered in `backend/app/agents/registry.py` — a single manifest dict:
@@ -198,47 +228,65 @@ AGENT_REGISTRY = {
     "positioning_advisor":  {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/positioning_advisor_v1.txt"},
     "email_drafter":        {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/email_drafter_v1.txt"},
     "action_generator":     {"model": "claude-haiku-4-5-20251001",  "version": "1.0", "prompt_file": "prompts/action_generator_v1.txt"},
+    # Phase 15:
+    "profile_extractor":    {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/profile_extractor_v1.txt"},
 }
 ```
 Use `AGENT_REGISTRY` as the single source of model/version truth — never hardcode model names elsewhere.
 
 ### Agent Orchestration Flow (Approved)
 ```
+On Profile Upload (Phase 15 — user uploads resume/cover letter):
+  └─ Profile Extractor (Sonnet)
+       input: raw_resume_text + cover_letter_texts[] + existing profile
+       output: years_of_experience, seniority_band, work_history,
+               key_achievements, cover_letter_narratives[]
+       → Present extracted fields to user for APPROVAL before writing to career_profiles
+       → On approval: UPDATE career_profiles, re-score existing opportunities (async)
+
 Signal Ingestion (Celery Worker)
   → [Orchestrator: create agent_run record, assign run_id]
   │
   ├─ Signal Classifier (Haiku)
   │    classify type + score relevance + generate embedding
   │    [GATE: relevance_score < 0.4 → stop, mark signal as low-relevance]
+  │    input now includes: seniority_band, work_history industries (Phase 15)
+  │
+  ├─ [SENIORITY GATE — post-prediction, Phase 15]
+  │    if predicted role is 2+ seniority bands above user → downgrade to SPECULATIVE
   │
   ├─ Opportunity Predictor (Sonnet)
-  │    input: company signals + user career profile
+  │    input: company signals + user career profile (incl. seniority_band, work_history)
   │    output: predicted_role, confidence, timeline_weeks, 
-  │            why_fit, positioning_notes, ideal_contact_title
+  │            why_fit, approach_angle, ideal_contact_title
   │
   ├─ [PARALLEL — both triggered by Opportunity Predictor output]
   │   ├─ Career Fit Scorer (Sonnet)
-  │   │    input: opportunity + user profile embedding
+  │   │    input: opportunity + user profile (incl. work_history, key_achievements)
   │   │    output: fit_score (0–100), fit_explanation, skill_gaps
   │   │
   │   └─ Positioning Advisor (Sonnet)
-  │        input: user profile + opportunity + company signals
-  │        output: positioning_narrative, key_talking_points, approach_angle
+  │        input: user profile + opportunity + company signals + approach_angle seed
+  │        output: positioning_narrative, key_talking_points
+  │        (approach_angle from predictor is the seed; advisor builds the full narrative)
   │
   ├─ [JOIN: wait for Career Fit Scorer + Positioning Advisor]
   │
   ├─ Action Generator (Haiku)
   │    input: opportunity + fit_score + contacts
-  │    output: ActionItem[] with title, type, priority, due_date
+  │    output: ActionItem[] with title, type, priority, due_date, intended_effect
   │    priority = urgency × confidence × fit_score
+  │    intended_effect = 1-sentence rationale for why this action matters
   │
   └─ [Orchestrator: update agent_run status = SUCCESS]
 
-On Demand (user clicks "Draft Email"):
+On Demand (user clicks "Draft Outreach"):
   └─ Email Drafter (Sonnet)
-       input: action + contact + opportunity + user_profile
-       output: 3 variants (Professional / Warm / Direct)
-       each variant: subject, body, key_points_used
+       input: action + contact + opportunity + user_profile + target_context
+       output (channel=EMAIL): 3 variants (Professional / Warm / Direct)
+       output (channel=LINKEDIN): connection note (300 chars) + InMail (2000 chars)
+       each variant: subject/message, body, key_points_used
+       cover_letter narrative matching target company industry auto-selected
 ```
 
 ### Base Agent Class
@@ -265,9 +313,9 @@ Based on the Loveable-designed frontend (Index.tsx), these pages must be develop
 | `/` | Dashboard | Pipeline viz, Top opportunities (High confidence), Recent signals, Priority actions |
 | `/signals` | Signals | Full signal list, filter by type/date/company, signal detail view, linked opportunities |
 | `/opportunities` | Opportunities | All predicted opps, confidence filter, timeline, why-fit, key contact, predicted salary |
-| `/actions` | Actions | Task queue, priority sorting, status management (Todo/In Progress/Done/Snoozed), due dates |
-| `/outreach` | Outreach | Email drafts, Gmail send, template library, send tracking |
-| `/profile` | Career Profile | Aspiration capture, skills, target roles/industries, profile completeness |
+| `/actions` | Actions | Task queue, filter by company/status/priority, action detail showing linked job + signal + intended_effect rationale |
+| `/outreach` | Outreach | Email + LinkedIn message drafts, Gmail send, channel selection, send tracking, contact LinkedIn URL |
+| `/profile` | Career Profile | Document upload (resume + cover letters), extracted profile review/approval, aspiration capture, profile completeness |
 | `/analytics` | Analytics | Signals over time, conversion pipeline funnel, outreach response rates |
 | `/settings` | Settings | API keys, notification prefs, signal source config, connected accounts |
 
@@ -309,20 +357,25 @@ Speculative: "bg-muted text-muted-foreground border-border"
 | GET | `/opportunities` | List predicted opportunities (filter: confidence/status/company) |
 | GET | `/opportunities/{id}` | Opportunity detail with signals + actions |
 | POST | `/opportunities/{id}/refresh` | Re-score with latest signals → returns `{run_id}` |
-| GET | `/actions` | List actions (filterable by status/priority/type) |
+| GET | `/actions` | List actions (filterable by status/priority/type/company_id) |
+| GET | `/actions/{id}` | Action detail with linked opportunity + signal + intended_effect |
 | PUT | `/actions/{id}` | Update action status/priority/due_date |
 | POST | `/actions/{id}/draft-email` | Generate email draft → returns `{run_id}` |
-| GET | `/outreach` | List outreach emails (filter: status=draft/sent/replied) |
-| POST | `/outreach/draft` | Generate new email draft (contact + action) |
-| POST | `/outreach/{id}/send` | Send via Gmail |
+| GET | `/outreach` | List outreach emails (filter: status=draft/sent/replied, channel=EMAIL/LINKEDIN) |
+| POST | `/outreach/draft` | Generate new outreach draft (contact + action + channel) |
+| POST | `/outreach/{id}/send` | Send via Gmail (EMAIL channel only) |
 | POST | `/outreach/oauth/connect` | Start Gmail OAuth flow → returns redirect URL |
 | GET | `/outreach/oauth/callback` | Complete Gmail OAuth (redirect target) |
-| GET | `/profile` | Get career profile |
+| GET | `/profile` | Get career profile (includes extracted fields from Phase 15) |
 | PUT | `/profile` | Update career profile |
 | POST | `/profile/analyze` | Trigger profile re-analysis → returns `{run_id}` |
+| GET | `/profile/documents` | List uploaded documents + extraction status (Phase 15) |
+| POST | `/profile/documents` | Upload resume or cover letter (multipart/form-data) → returns `{doc_id}` (Phase 15) |
+| DELETE | `/profile/documents/{id}` | Remove document + clear extracted contribution (Phase 15) |
+| POST | `/profile/documents/{id}/approve` | Accept extracted fields into career profile (Phase 15) |
 | GET | `/companies/{id}` | Company detail + signals + opportunities |
-| GET | `/contacts` | User's saved contacts |
-| POST | `/contacts/search` | Search Proxycurl by company + title keywords |
+| GET | `/contacts` | User's saved contacts (incl. linkedin_url from PDL) |
+| POST | `/contacts/search` | Search PDL by company + title keywords |
 | GET | `/contacts/{id}` | Contact detail |
 
 #### Agent & Pipeline
@@ -476,22 +529,26 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 > - Supabase: https://supabase.com (free project)
 
 ### Deferred Technical Work
-| Item | Reason Deferred | Target Version |
-|------|----------------|----------------|
+| Item | Reason Deferred | Target |
+|------|----------------|--------|
 | Supabase Realtime push (instead of polling) | Polling is simpler for v1.0 | v1.5 |
 | Rate limiting middleware (100 req/min/user) | Single user in v1.0 | v1.5 |
-| Full analytics page (funnels, response rate charts) | Needs historical data to be useful | v1.5 |
 | Agent prompt A/B testing framework | Overkill for single user | v2.0 |
-| Agent prompt v2 — generalised, user-agnostic versions | v1.0 prompts are hardcoded for HEC Paris MBA persona (specific sectors, role archetypes, scoring anchors). Works perfectly for single-user v1.0 but cannot scale to a cohort or broader market without prompt generalisation. v2 prompts must inject all persona context dynamically from the user's career profile, with no hardcoded assumptions. See PLAN.md "Agent Prompt v2" note. | v1.5 |
+| Agent prompt v2 — generalised, user-agnostic versions | v1.0 prompts hardcoded for HEC MBA persona. Must inject all persona context dynamically (seniority, industries, role archetypes) from career_profiles at call time. Requires Jinja2/f-string prompt builder layer. | v1.5 |
 | Celery Flower monitoring dashboard | Nice-to-have ops tooling | v1.5 |
-| Multi-user RLS policy audit | Architecture is cohort-ready but untested at scale | v1.5 |
+| Multi-user RLS policy audit | Architecture cohort-ready but untested at scale | v1.5 |
 | PDL rate limit queue (dedicated priority lane) | Low volume in v1.0 | v1.5 |
 | SEC EDGAR full-text 8-K parsing | Regex-based extraction good enough for v1.0 | v1.5 |
 | Dealroom integration | Dropped for v1.0 (€6k+/yr); EU signals via NewsData.io + RSS | v2.0 |
 | Email open/reply tracking (Gmail webhook) | Polling-based check sufficient for v1.0 | v1.5 |
-| Production deployment (cloud hosting) | Docker local is sufficient for single user | v1.5 |
+| Production deployment (cloud hosting) | Docker local sufficient for single user | v1.5 |
 | Adversarial testing / red team (prompt injection) | Critical for multi-user; defer until v1.5 | v1.5 |
 | PII redaction in agent memory/logs | Required for multi-user compliance | v1.5 |
+| Signal sharing architecture (company-scoped signals, not user-scoped) | Single user in v1.0 — no duplication concern. At v1.5 cohort: separate `signals` (company-level) from `user_signal_relevance` (user-specific scoring). Major schema migration — plan carefully before cohort launch. | v1.5 |
+| LinkedIn API integration (official messaging) | Requires LinkedIn Partner Program — not publicly available. v1.0 generates LinkedIn message text for copy/paste. v1.5 can explore browser automation (Playwright) with ToS review. | v1.5 |
+| Historical backtesting (predict from past signals, validate against actuals) | Requires Adzuna job board integration (Phase 14) as prerequisite. Post-MVP validation tool. | Phase 19 |
+| Resume/cover letter generation feature | Enabled by Phase 15 Profile Extractor (structured work_history + achievements). Generate tailored 1-page resume or cover letter for a specific opportunity. | Phase 20 |
+| Profile extraction approval UX: switch from user-approval to auto-overwrite | Currently user must approve extracted fields (Option B — safer for v1.0). At v1.5 with multiple users, consider auto-overwrite for first upload + diff-based approval for subsequent uploads. Configurable via `PROFILE_EXTRACTION_MODE` env var. | v1.5 |
 
 ### Known Technical Debt (Acceptable for v1.0)
 - `USE_MOCK_DATA` flag is a dev shortcut — clean up mock routes before v1.5
@@ -499,6 +556,7 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 - No structured logging format yet — add OpenTelemetry spans in v1.5
 - No API versioning strategy beyond `/v1/` — define `/v2/` migration plan before v1.5
 - `preferences_json` on users table is a grab-bag — normalize into proper columns in v1.5
+- `positioning_notes` column name in DB (legacy) — rename to `approach_angle` in Phase 14 migration
 
 ---
 
@@ -537,6 +595,22 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-21 | FE pipeline progress bar deferred to Phase 14 | Polling-based (`GET /agents/run-status` every 2s). Supabase Realtime upgrade in v1.5. Phase 14 after full pipeline run is stable. |
 | 2026-04-21 | Shareable launch package deferred to Phase 14 | Docker stack from Phase 11 is the foundation. Phase 14 adds `start.sh`, `QUICKSTART.md`, `.devcontainer/devcontainer.json`, and demo seed data. |
 | 2026-04-21 | OpenAI embeddings: keep as-is | `text-embedding-3-small` costs ~$0.01 for entire 1,446-signal corpus. Replacing with local model adds complexity for negligible saving. Not re-litigated. |
+| 2026-04-23 | Phase 12 declared complete | ~450 signals classified with real Haiku. Opportunity Predictor + Career Fit Scorer + Action Generator all ran on classified signals. Full pipeline end-to-end live for v1.0. |
+| 2026-04-23 | `positioning_notes` renamed to `approach_angle` in Opportunity Predictor | Field is a 1-sentence strategic seed for the Positioning Advisor, not a positioning output itself. Renaming clarifies the intent and reduces confusion about agent responsibilities. |
+| 2026-04-23 | Positioning Advisor owns all positioning; predictor only seeds it | Opportunity Predictor outputs a single `approach_angle` sentence. Positioning Advisor reads it and builds the full narrative. Predictor does not do positioning — it identifies the angle. |
+| 2026-04-23 | `intended_effect` added to Action Generator output and `actions` table | Actions without rationale require blind trust from user. `intended_effect` = 1-sentence AI-generated explanation of what the action is expected to achieve. Required field from Action Generator. |
+| 2026-04-23 | Resume + cover letter upload added to profile (Phase 15) | Form-based profile is too thin. Resume + cover letters give: years of experience, seniority band, actual work history, key achievements, and positioning narratives per target context — all unavailable from form fields alone. |
+| 2026-04-23 | Profile Extractor Agent: Claude Sonnet, one-time per upload | One-time extraction cost ~$0.04/user (resume + 2 cover letters). Sonnet chosen over Haiku — nuanced achievement extraction and cover letter narrative parsing requires stronger reasoning. Prompt caching cuts re-analysis cost ~80%. |
+| 2026-04-23 | Profile extraction approval flow: user approves before overwrite (Option B) | Extracted fields shown to user before writing to career_profiles. Prevents bad extraction overwriting correct manual data. Designed to be switchable to auto-overwrite via `PROFILE_EXTRACTION_MODE` env var for v1.5 multi-user. |
+| 2026-04-23 | Multiple cover letters supported, each with `target_context` label | Different cover letters reveal how user frames themselves for different company types (PE vs tech vs consulting). Email Drafter auto-selects the most relevant cover letter narrative based on target company's industry. |
+| 2026-04-23 | `seniority_band` added to career profile; hard seniority gate post-prediction | Career Fit Scorer "Role Level Fit" dimension had no data to work with. Seniority band (ANALYST/ASSOCIATE/MANAGER/DIRECTOR/VP_PLUS) extracted from resume. Post-prediction gate: if role is 2+ bands above user → downgrade to SPECULATIVE. |
+| 2026-04-23 | LinkedIn message generation added to MVP scope (Phase 17) | User without Gmail connected still needs to reach contacts. LinkedIn message generation (connection note 300 chars + InMail 2000 chars) gives immediate value. Copy/paste flow — no LinkedIn API needed. |
+| 2026-04-23 | Contact LinkedIn URL surfaced from PDL (Phase 17) | PDL enrichment already returns `linkedin_url` for contacts. Surface it in action/contact detail so user can click directly to profile. Zero extra API cost. |
+| 2026-04-23 | Action page revamp planned for Phase 16 | Actions currently show title + status. Missing: which job, which signal triggered it, why this action. Phase 16 adds: company filter, JOIN with opportunity + signal, `intended_effect` display. |
+| 2026-04-23 | Signal entity disambiguation: domain-qualified search + pre-filter context check (Phase 18) | Searching "Bolt" returns Usain Bolt news. Fix: add domain/industry qualifier to search query at ingestion time. Pre-filter also checks that company name appears with industry/domain context before classifying. |
+| 2026-04-23 | Signal sharing (company-scoped) deferred to v1.5 | Single user = no duplication cost. Requires major schema migration (`user_id` removed from signals, new join table). Explicitly flagged for v1.5 cohort architecture review. |
+| 2026-04-23 | Historical backtesting deferred to Phase 19 | Requires Adzuna integration (Phase 14) as prerequisite. Can then: fetch signals from 2-3 months ago → run pipeline → validate predictions against Adzuna historical postings. Strong product credibility tool. |
+| 2026-04-23 | Analytics page real data wiring planned for Phase 19 | Frontend analytics page is mock-only. Backend `/analytics/dashboard` endpoint exists but frontend not wired to it. Phase 19 completes the connection and replaces mock data. |
 
 ---
 

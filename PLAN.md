@@ -1,7 +1,7 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-21 | Current Phase: **Phase 12 — Live Production Run** | IN PROGRESS ⏳
+> Last updated: 2026-04-23 | Current Phase: **Phase 14 — Post-MVP Enhancements** | NOT STARTED 🔲
 
 ---
 
@@ -25,8 +25,13 @@
 | 12 | Live Production Run | Signal ingestion live, classify + embed all signals, run full pipeline | 1 | 0 | 0 | 2–3 |
 | 13 | Signal & Agent Quality (MVP) | SEC EDGAR date fix, NewsData logger, Celery concurrency, prompt rewrites | 1 | 0 | 0 | 1–2 |
 | 14 | Post-MVP Enhancements | FE pipeline progress, Sonnet batch classifier, job board layer, launch package | 2 | 1 | 1 | 3–4 |
+| 15 | Resume & Document Intelligence | Document upload, Profile Extractor Agent, seniority gate, enrich all agents | 2 | 1 | 1 | 3–4 |
+| 16 | Action Page Revamp | Enrich actions with opp+signal context, company filter, intended_effect, FE redesign | 1 | 1 | 1 | 2–3 |
+| 17 | Outreach Expansion | LinkedIn message gen, PDL URL surfacing, outreach channel routing | 1 | 1 | 1 | 2–3 |
+| 18 | Signal Quality & Disambiguation | Domain-qualified search queries, pre-filter entity context matching | 1 | 0 | 1 | 2 |
+| 19 | Analytics + Historical Backtesting | Wire analytics FE to real BE, backtesting framework (requires Phase 14 Adzuna) | 1 | 1 | 1 | 2–3 |
 
-**Total estimated sessions (with ~2hr model limit each): 35–47 sessions**
+**Total estimated sessions (with ~2hr model limit each): 52–67 sessions**
 
 ---
 
@@ -1143,6 +1148,384 @@ curl http://localhost:8000/api/v1/signals
 
 ---
 
+## Phase 15: Resume & Document Intelligence
+
+**Goal:** Users upload their resume and cover letters. A Profile Extractor Agent parses them into structured career data, enriching all downstream agents with real experience, seniority, achievements, and positioning narratives.
+
+**Status:** 🔲 NOT STARTED
+
+**Prerequisite:** Phase 14 complete.
+
+---
+
+### Sprint 15.1 — Document Upload & Storage
+
+**Backend:**
+- Add `user_documents` table migration (see CLAUDE.md Section 4 for schema)
+- Add Supabase Storage bucket `user-documents` (private, user-scoped RLS)
+- `POST /profile/documents` — accepts multipart/form-data (PDF or DOCX, max 10MB)
+  - Validates file type (reject anything that isn't PDF/DOCX)
+  - Stores file to Supabase Storage, writes metadata row to `user_documents`
+  - Returns `{doc_id, filename, doc_type, extraction_status: "PENDING"}`
+- `GET /profile/documents` — list all user documents + extraction status
+- `DELETE /profile/documents/{id}` — remove file from Storage + DB row
+- Local text extraction runs synchronously on upload (pdfplumber for PDF, python-docx for DOCX)
+  - Extracted text written to `user_documents.extracted_text`
+  - Status updated: `PENDING` → `EXTRACTED`
+
+**Frontend (Profile page):**
+- New "Documents" section above the existing form
+- Drag-and-drop upload zone accepting PDF/DOCX
+- User labels each upload: RESUME or COVER LETTER (dropdown)
+- Cover letter: text input for `target_context` ("PE firms", "tech startups", "consulting")
+- Document list: filename, type badge, target_context, date, delete button
+- Profile completion bar: +20% per document uploaded (max 2 documents for full credit)
+
+**Tests:**
+- Unit: file type validation, text extraction from fixture PDFs/DOCXs
+- Integration: upload → Storage → DB row → GET list
+
+---
+
+### Sprint 15.2 — Profile Extractor Agent
+
+**New agent:** `backend/app/agents/profile_extractor.py`
+
+**Model:** Claude Sonnet (one-time cost ~$0.04/user for resume + 2 cover letters)
+
+**Input:**
+```json
+{
+  "user_id": "...",
+  "resume_text": "...",
+  "cover_letters": [
+    {"text": "...", "target_context": "PE firms"},
+    {"text": "...", "target_context": "tech startups"}
+  ],
+  "existing_profile": {"current_role": "...", "target_roles": [...]}
+}
+```
+
+**Output:**
+```json
+{
+  "years_of_experience": 6,
+  "seniority_band": "ASSOCIATE",
+  "education": [{"degree": "MBA", "institution": "HEC Paris", "year": 2026, "field": "General Management"}],
+  "work_history": [{"company": "BCG", "title": "Senior Consultant", "start_year": 2021, "end_year": 2024, "summary": "..."}],
+  "key_achievements": [{"achievement": "...", "impact": "...", "context": "..."}],
+  "inferred_skills": ["financial modelling", "stakeholder management"],
+  "cover_letter_narratives": [{"target_context": "PE firms", "core_narrative": "..."}]
+}
+```
+
+**Trigger:** `POST /profile/documents/{id}/analyze` → dispatches Celery task → returns `{run_id}`
+- Runs after all documents are uploaded (user clicks "Analyze my profile")
+- OR auto-triggered after first document upload
+
+**Approval flow:**
+- Extraction output stored in a staging area (not yet written to `career_profiles`)
+- `GET /profile/documents/pending-review` returns extracted fields for user review
+- `POST /profile/documents/{id}/approve` — user approves extracted fields
+  - Writes approved fields to `career_profiles`
+  - Sets `profile_source = RESUME` (or `BOTH` if manual fields also present)
+  - Sets `last_analyzed_at = now()`
+  - Clears staging area
+- User can edit any field before approving
+
+**Tests:**
+- Unit: prompt output parsing, Pydantic validation
+- Integration: upload + extract + approve flow end-to-end
+- Snapshot: fixture PDF → known extraction output
+
+---
+
+### Sprint 15.3 — Wire Enriched Profile to All Agents
+
+Update all agent input schemas and prompts to consume the new profile fields:
+
+**Signal Classifier:**
+- Add `seniority_band` and `work_history_industries[]` to `UserProfileSummary`
+- Prompt update: relevance scoring now considers user's actual industry background, not just aspirations
+
+**Opportunity Predictor:**
+- Add `years_of_experience`, `seniority_band`, `work_history` to `UserProfileSummary`
+- Prompt update: seniority-appropriate role prediction with explicit anchor examples
+- **Hard seniority gate** (code-level, post-prediction):
+  - Parse predicted role title for seniority keywords (Chief/C-Suite/VP/Director/Manager/Lead/Senior/Associate/Analyst)
+  - If predicted band > user band by 2+ levels → force `confidence = SPECULATIVE`
+  - Log the downgrade for debugging
+
+**Career Fit Scorer:**
+- Add `work_history`, `key_achievements` to `UserProfileForScoring`
+- Prompt update: "Role Level Fit" dimension now has explicit experience evidence to cite
+
+**Positioning Advisor:**
+- Add `cover_letter_narratives` (matching target company's industry) to input
+- Prompt update: reference specific achievements and cover letter narrative in positioning
+
+**Email Drafter:**
+- Add `key_achievements`, `cover_letter_narratives` (target-context matched) to user_profile input
+- Prompt update: reference at least one specific achievement in every email draft
+
+**Tests:**
+- Integration: full pipeline run with enriched profile → verify opportunities are seniority-appropriate
+- Unit: seniority gate logic for all band combinations
+
+---
+
+### Sprint 15.4 — Seniority Gate & FE Profile Review UI
+
+**Seniority gate** (already described in Sprint 15.3 — implement here alongside FE):
+- `SeniorityGate` utility class: maps role title keywords → `seniority_band` enum
+- Called in `predict_opportunities` worker after `OpportunityPredictorAgent.predict()`
+- Returns `(original_confidence, gated_confidence, reason)` for audit trail
+
+**Frontend — Profile extraction review UI:**
+- After "Analyze" completes, Profile page shows a review panel: extracted fields side-by-side with current manual entries
+- User toggles each field: "Use extracted" vs "Keep existing"
+- Single "Apply approved fields" button writes all toggled-on fields
+- Confirmation toast: "Profile updated — re-scoring 3 existing opportunities..."
+- Existing opportunities get async re-score triggered in background
+
+---
+
+## Phase 16: Action Page Revamp
+
+**Goal:** Actions show full context — which job, which signal triggered it, what the action is expected to achieve. Company filter added. Users trust the system because they understand the reasoning.
+
+**Status:** 🔲 NOT STARTED
+
+**Prerequisite:** Phase 14 complete. Phase 15 Sprint 15.3 recommended (richer profile = better intended_effect).
+
+---
+
+### Sprint 16.1 — Backend Data Enrichment
+
+**DB migration:**
+- Add `intended_effect text` column to `actions` table
+
+**Action Generator prompt update:**
+- Add `intended_effect` to output schema: 1 sentence on what this action achieves
+- Example: `"Opening a warm referral path before the role is posted publicly."`
+- Required field — Action Generator must always output it
+
+**`GET /actions` API update:**
+- Add `company_id` query param as filter (alongside existing `status`, `priority`)
+- JOIN `opportunities` table: include `predicted_role`, `confidence`, `fit_score`
+- JOIN `signals` table (via `source_signal_id`): include signal `title`, `type`
+- Response enriched with: `opportunity_role`, `opportunity_confidence`, `source_signal_title`, `source_signal_type`, `intended_effect`
+
+**`GET /actions/{id}` new endpoint:**
+- Full action detail: all fields + full opportunity detail + full signal detail
+
+**Tests:**
+- Unit: enriched query returns correct JOIN data
+- Integration: action list + detail with real DB data
+- Confirm `company_id` filter works correctly
+
+---
+
+### Sprint 16.2 — Frontend Action Page Redesign
+
+**Company filter bar:**
+- Horizontal chip bar above the action list: "All" | "McKinsey" | "BCG" | "Bain" ...
+- Chips generated from distinct `company` values in the action list
+- Selecting a chip filters the list client-side (fast, no extra API call)
+
+**Action cards (redesigned):**
+```
+┌──────────────────────────────────────────────────────┐
+│ [HIGH] Connect with Sarah Chen · McKinsey             │
+│                                                       │
+│ For: Strategy Manager (HIGH confidence, fit 87/100)   │
+│ Signal: "McKinsey hired 3 ex-Bain partners in Paris"  │
+│ Why this action: Opening a warm referral path before  │
+│                  the role is posted publicly.         │
+│                                                       │
+│ Due: 28 Apr  [TODO ▾]  [Draft outreach]              │
+└──────────────────────────────────────────────────────┘
+```
+
+**Empty state:** "No actions yet. Run the pipeline to generate opportunities and actions."
+
+**Tests:**
+- Playwright: company filter, action card content, status change, draft email trigger
+
+---
+
+## Phase 17: Outreach Expansion
+
+**Goal:** Users can reach contacts via LinkedIn (message text, copy/paste) or email. LinkedIn message generation available even without Gmail connected. PDL contact LinkedIn URLs surfaced.
+
+**Status:** 🔲 NOT STARTED
+
+**Prerequisite:** Phase 16 complete (action detail context feeds Email Drafter).
+
+---
+
+### Sprint 17.1 — LinkedIn Message Generation
+
+**Email Drafter prompt update:**
+- Add `channel` input field: `EMAIL | LINKEDIN`
+- For `LINKEDIN`:
+  - Connection note variant: max 300 chars (LinkedIn connection request limit)
+  - InMail variant: max 2000 chars (LinkedIn InMail limit)
+  - Both reference specific achievement + role + company context
+  - Cover letter narrative for matching `target_context` injected automatically
+
+**`POST /outreach/draft` API update:**
+- Add `channel: str = "EMAIL"` to `DraftEmailRequest`
+- For `LINKEDIN` channel: no Gmail integration required — returns message text directly
+- Response includes `linkedin_profile_url` from contact PDL enrichment data
+
+**DB migration:**
+- Add `channel text DEFAULT 'EMAIL'` to `outreach_emails` table
+- LINKEDIN drafts stored as `outreach_emails` with `channel='LINKEDIN'` (no `gmail_message_id`)
+
+**Tests:**
+- Unit: LinkedIn character limit validation (300 / 2000)
+- Integration: draft LinkedIn message end-to-end
+
+---
+
+### Sprint 17.2 — PDL LinkedIn URL + FE Channel Routing
+
+**PDL contact enrichment already returns `linkedin_url`** — surface it everywhere:
+- `GET /contacts/{id}` response includes `linkedin_url`
+- `GET /actions` enriched response includes `contact_linkedin_url`
+
+**Frontend updates:**
+- Action cards: LinkedIn icon button next to "Draft outreach" → opens LinkedIn profile in new tab
+- Outreach draft modal: toggle at the top: `[✉ Email]  [in LinkedIn]`
+  - Switching channel re-drafts with appropriate character limits
+- LINKEDIN draft view: two text areas (Connection Note + InMail) + "Copy" buttons for each
+- No "Send" button for LinkedIn (copy/paste flow — no API)
+- GMAIL not connected banner: "Gmail not connected — use LinkedIn outreach or connect Gmail in Settings"
+
+**Tests:**
+- Playwright: channel toggle, copy buttons, LinkedIn URL click-through
+- Unit: outreach list filter by channel
+
+---
+
+## Phase 18: Signal Quality & Entity Disambiguation
+
+**Goal:** Reduce signal noise by ensuring search queries are company-specific and pre-filter checks entity context before classifying. Eliminate "Usain Bolt wins race" type noise.
+
+**Status:** 🔲 NOT STARTED
+
+**Prerequisite:** Phase 14 Sprint 14.1 (keyword pre-filter) complete — Phase 18 extends it.
+
+---
+
+### Sprint 18.1 — Domain-Qualified Search Queries
+
+**Problem:** Searching "Bolt" returns Usain Bolt articles. "Apple" returns apple fruit articles.
+
+**Fix — `ingest_signals.py` + NewsData/GNews clients:**
+- Build a `search_query` per company using: `company name + industry + optional HQ city`
+  - Example: `"Bolt electric scooter mobility"` not just `"Bolt"`
+  - Example: `"Apple technology computing"` not just `"Apple"`
+- `companies` table already has `industry` field — use it
+- Add `search_alias` optional field to companies (e.g. "Bolt Mobility" for the Bolt scooter company)
+  - Editable via `PUT /companies/{id}` + Settings UI
+- NewsData client: use `q` param with multi-term query (already supports boolean-ish)
+- GNews client: use `q` with quoted phrase for company name + industry term
+
+**Tests:**
+- Unit: `build_search_query(company_name, industry, hq_city)` returns qualified string
+- Integration: mock API calls verify qualified query is sent, not bare name
+
+---
+
+### Sprint 18.2 — Pre-Filter Entity Context Check
+
+**Extends Phase 14.1 keyword pre-filter with entity validation step:**
+
+Before passing a signal to the classifier, check that the signal is actually about the target company:
+- **Check 1:** Company name appears in title or description (already implicit from search, but some results slip through)
+- **Check 2:** At least one of the following also appears: company domain keyword, industry term, HQ city, known product name
+- **Implementation:** Fast regex check in `classify_signals.py` pre-filter step
+  - `CompanyContextMatcher` class: takes company dict, builds term set, checks against signal text
+  - If 0 terms match → `relevance_score = 0.05`, skip AI classification, log as "entity_mismatch"
+- **Company term set sources:** `companies.domain` (extract root word), `companies.industry`, `companies.location`
+
+**Monitoring:**
+- Log count of entity_mismatch per company per run
+- If a company has >50% entity_mismatch rate → flag in logs for `search_alias` review
+
+**Tests:**
+- Unit: `CompanyContextMatcher` with Bolt (expected: blocks Usain Bolt), Apple (expected: passes Apple tech)
+- Integration: full classify run shows reduced noise signals for ambiguous company names
+
+---
+
+## Phase 19: Analytics Real Data + Historical Backtesting
+
+**Goal:** Analytics page shows real data from the DB. Backtesting framework validates that historical signals would have predicted actual job postings.
+
+**Status:** 🔲 NOT STARTED
+
+**Prerequisite:** Phase 14 Sprint 14.2 (Adzuna job board layer) must be complete for backtesting.
+
+---
+
+### Sprint 19.1 — Wire Analytics FE to Real Backend
+
+**Backend `GET /analytics/dashboard`** (already exists — verify it returns):
+- `signals_this_week: int` — signals ingested in last 7 days
+- `new_opportunities: int` — opportunities created in last 7 days
+- `actions_completed: int` — actions with status=DONE in last 7 days
+- `outreach_sent: int` — emails/LinkedIn messages sent in last 7 days
+- `pipeline_health: {classified_pct, predicted_pct, actioned_pct}` — funnel percentages
+- `top_companies: [{name, signal_count, opportunity_count}]` — top 5 by activity
+
+**Frontend:**
+- Replace all mock data references in `analytics/page.tsx` with real `GET /analytics/dashboard` calls
+- Add loading skeleton + error boundary
+- Pipeline funnel: Signals → Classified → Opportunities → Actions → Outreach (real %)
+- "Top companies by activity" bar chart (real data)
+- Signal type breakdown pie chart (FUNDING / EXEC_HIRE / EXPANSION / etc.)
+
+**Tests:**
+- Unit: analytics endpoint returns correct counts from fixture DB
+- E2E Playwright: analytics page loads real data, no mock fallback visible
+
+---
+
+### Sprint 19.2 — Historical Backtesting Framework
+
+**Concept:** Fetch signals from 60–90 days ago → run pipeline → compare predicted roles against actual Adzuna job postings from that period.
+
+**Implementation:**
+- `POST /backtest/run` — accepts `{lookback_days: int, company_ids: []}` → enqueues Celery task
+  - Fetches signals dated `now() - lookback_days` from existing DB (no new API calls)
+  - Runs Opportunity Predictor on those signals
+  - Queries Adzuna for postings at those companies in the same period
+  - Compares: did we predict a role that was posted within 8 weeks?
+- `GET /backtest/results/{run_id}` — returns comparison table:
+  ```json
+  {
+    "hit_rate": 0.67,
+    "predictions": [
+      {"company": "McKinsey", "predicted_role": "Strategy Manager",
+       "adzuna_match": "Senior Strategy Consultant", "match_score": 0.82}
+    ]
+  }
+  ```
+- Results stored in `backtest_runs` table for historical comparison
+
+**FE (Analytics page, new tab "Backtesting"):**
+- "Run Backtest" button → shows progress → results table
+- Hit rate badge: "67% of predictions matched real postings within 8 weeks"
+
+**Tests:**
+- Unit: role similarity matching (predicted vs actual title)
+- Integration: backtest run with fixture historical signals + mock Adzuna data
+
+---
+
 ## Progress Tracker
 
 ### By Phase
@@ -1165,6 +1548,11 @@ curl http://localhost:8000/api/v1/signals
 | 12 | ✅ Complete | 2/2 | Signal ingestion live ✅, ~450 signals classified ✅, Opportunity Predictor + Fit Scorer + Action Generator all run ✅. Full pipeline end-to-end live. |
 | 13 | ✅ Complete | 2/2 | Sprint 13.1 ✅: SEC EDGAR 90-day filter, 0-article logger, Celery ×4. Sprint 13.2 ✅: prompt rewrites (classifier + predictor + fit scorer) — all MBA-specific, grounded, cited |
 | 14 | 🔲 Not Started | 0/4 | Post-MVP: Sonnet batch + pre-filter, job board layer, FE pipeline bar, extended thinking, launch package |
+| 15 | 🔲 Not Started | 0/4 | Resume & Document Intelligence: upload, Profile Extractor Agent, seniority gate |
+| 16 | 🔲 Not Started | 0/3 | Action Page Revamp: enriched context, company filter, intended_effect |
+| 17 | 🔲 Not Started | 0/3 | Outreach Expansion: LinkedIn message gen + channel routing |
+| 18 | 🔲 Not Started | 0/2 | Signal Disambiguation: domain-qualified queries, pre-filter entity check |
+| 19 | 🔲 Not Started | 0/3 | Analytics real data + historical backtesting |
 
 **Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions.
 
@@ -1213,90 +1601,60 @@ Phase 5 (People Intel) ─────────┘         ↓
             Phase 13 (Signal & Agent Quality)
                     ↓
             Phase 14 (Post-MVP Enhancements)
+                    ↓
+     ┌──────────────┼──────────────────┐
+     ↓              ↓                  ↓
+Phase 15        Phase 16          Phase 17
+(Resume &      (Action Page      (Outreach
+ Document       Revamp)           Expansion /
+ Intelligence)                    LinkedIn)
+     │              │
+     └──────┬────────┘
+            ↓
+       Phase 18 (Signal Disambiguation)
+            ↓
+       Phase 19 (Analytics + Backtesting)
+       [requires Phase 14.2 Adzuna]
 ```
+
+> Phases 15, 16, 17 are independent of each other and can run in parallel.
+> Phase 18 requires Phase 14.1 (keyword pre-filter) as its foundation.
+> Phase 19 requires Phase 14.2 (Adzuna) for the backtesting sprint.
 
 ---
 
----
+## 🔄 How to Start a Dev Session
 
-## 🔄 How to Restart Tomorrow (Phase 12 Continuation)
-
-> Run these commands in order when you start a new session.
-
-### Step 1 — Start Redis (required for Celery)
-Open a terminal, run:
+### Start Redis + FastAPI + Celery
 ```powershell
-# If Redis is installed as a Windows service:
-Start-Service Redis
+# Terminal 1 — Redis
+Start-Service Redis   # or: redis-server
 
-# OR if running Redis manually:
-redis-server
-```
-
-### Step 2 — Start the FastAPI server
-Open a new terminal in `E:\Claude Projects\Apex\backend`:
-```powershell
+# Terminal 2 — FastAPI
 cd "E:\Claude Projects\Apex\backend"
 C:\Python314\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
 
-### Step 3 — Start the Celery worker
-Open a new terminal in `E:\Claude Projects\Apex\backend`:
-```powershell
+# Terminal 3 — Celery worker (Windows-safe threads pool)
 cd "E:\Claude Projects\Apex\backend"
 C:\Python314\python.exe -m celery -A app.core.celery_app worker -Q high,default,low --loglevel=info --pool=threads --concurrency=4 --logfile=celery_worker.log
 ```
-> **Note:** `--pool=threads --concurrency=4` is Windows-safe (no subprocess forking). This replaces the old `--pool=solo` workaround and cuts bulk classification time from ~3 hours to ~45 minutes. Test with 10 signals first to verify no asyncpg race conditions before a full bulk run.
 
-### Step 4 — Get a JWT token
+### Get a JWT token
 ```powershell
 cd "E:\Claude Projects\Apex\backend"
-# login.json contains: {"email":"swapneet.lahoti@gmail.com","password":"Apex2026!"}
-# (not committed to git — recreate if missing)
 echo '{"email":"swapneet.lahoti@gmail.com","password":"Apex2026!"}' > login.json
 curl.exe -s -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: application/json" --data-binary "@login.json"
 # Copy the access_token from the response
 ```
 
-### Step 5 — Trigger batch classification of remaining signals
-```powershell
-$TOKEN = "paste_token_here"
-curl.exe -s -X POST http://localhost:8000/api/v1/signals/classify -H "Authorization: Bearer $TOKEN"
-# Returns: {"queued": N, "message": "Queued N signals for classification"}
-# N should be ~1420 (the ones not yet processed)
-```
-
-### Step 6 — Monitor progress
-```powershell
-# Watch the worker log
-Get-Content "E:\Claude Projects\Apex\backend\celery_worker.log" -Tail 20 -Wait
-# Look for: "DB updated: signal ... → type=X relevance=Y.YY"
-# And:      "embed_signal: signal ... embedded (1536 dims)"
-```
-
-### Step 7 — After classification completes, run Opportunity Predictor
-This is the next task to implement. Tell Claude:
-> "Signal classification is complete. Now implement and run the Opportunity Predictor pipeline — for each company that has signals with relevance_score >= 0.4, run OpportunityPredictorAgent (Claude Sonnet) and save predicted opportunities to the DB."
-
----
-
-### Current DB State (as of 2026-04-21 session end)
+### Current DB State (as of 2026-04-23)
 | Metric | Value |
 |--------|-------|
 | Total signals in DB | 1,446 |
-| Signals classified | ~26 |
-| Signals awaiting classification | ~1,420 |
-| Signals with embeddings | ~15 (the ones that passed gate) |
-| Opportunities | 0 (Opportunity Predictor not yet run) |
-| Actions | 0 (Action Generator not yet run) |
-
-### Key Files Changed This Session
-| File | What Changed |
-|------|-------------|
-| `backend/app/workers/ingest_signals.py` | Full live DB path: company lookup, asyncpg insert, dedup |
-| `backend/app/workers/classify_signals.py` | Full live DB path: load signal, Claude Haiku classify, DB update, OpenAI embed |
-| `backend/app/services/signal_service.py` | `trigger_ingest()` now dispatches real Celery task |
-| `backend/app/api/v1/signals.py` | Added `POST /signals/classify` endpoint |
+| Signals classified | ~450 |
+| Signals with embeddings | ~280 (those that passed relevance gate) |
+| Opportunities | Predicted (Opportunity Predictor ran) |
+| Actions | Generated (Action Generator ran) |
 | `.gitignore` | Added login.json, ingest.json, celerybeat-schedule* exclusions |
 
 ---
