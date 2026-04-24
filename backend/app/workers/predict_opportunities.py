@@ -370,7 +370,6 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
                         predicted_role=output.predicted_role,
                     )
                     if val_result.is_validated:
-                        import json as _json  # noqa: PLC0415
                         import asyncpg as _asyncpg  # noqa: PLC0415
                         import uuid as _uuid  # noqa: PLC0415
                         from app.db.session import get_asyncpg_db_url as _get_db_url  # noqa: PLC0415
@@ -382,7 +381,7 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
                                 SET real_postings = $1, status = 'VALIDATED', updated_at = now()
                                 WHERE id = $2
                                 """,
-                                _json.dumps(val_result.real_postings),
+                                val_result.real_postings,  # pass list directly — asyncpg encodes to JSONB
                                 _uuid.UUID(opportunity_id),
                             )
                         finally:
