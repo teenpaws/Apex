@@ -139,4 +139,22 @@ class BatchSignalClassifierAgent(BaseAgent):
                     item["signal_type"] = "UNKNOWN"
             if item.get("signal_id") in signal_ids:
                 results.append(SignalClassificationResult(**item))
+
+        # Fill UNKNOWN defaults for any signals Claude silently dropped —
+        # ensures DB write always covers the full chunk with no silent data loss.
+        returned_ids = {r.signal_id for r in results}
+        for sig in original_signals:
+            if sig.signal_id not in returned_ids:
+                logger.warning(
+                    "Batch classifier missing result for signal_id=%s; defaulting to UNKNOWN",
+                    sig.signal_id,
+                )
+                results.append(SignalClassificationResult(
+                    signal_id=sig.signal_id,
+                    signal_type="UNKNOWN",
+                    relevance_score=0.1,
+                    key_facts=[],
+                    reasoning="Missing from batch classifier response — defaulted to UNKNOWN",
+                ))
+
         return BatchSignalClassifierOutput(results=results)
