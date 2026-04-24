@@ -28,6 +28,12 @@ from celery.utils.log import get_task_logger
 
 from app.core.celery_app import celery_app
 from app.core.config import get_settings
+from app.services.signal_prefilter import SignalPreFilter
+from app.agents.batch_signal_classifier import (
+    BatchSignalClassifierAgent,
+    BatchSignalClassifierInput,
+    SignalBatchItem,
+)
 
 logger = get_task_logger(__name__)
 
@@ -424,3 +430,119 @@ def classify_and_embed(signal_id: str) -> dict[str, Any]:
         **embed_result,
         "pipeline": "classify_and_embed",
     }
+
+
+@celery_app.task(
+    name="app.workers.classify_signals.batch_classify_signals_upgrade",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    queue="default",
+)
+def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict:
+    """
+    Upgraded batch signal classification: pre-filter → Sonnet batch.
+
+    1. Load all signals from DB (or mock)
+    2. Keyword pre-filter: eliminate ~40-60% before AI
+    3. Chunk remaining into BATCH_CLASSIFY_SIZE groups
+    4. One Sonnet call per chunk
+    5. Write results back to DB
+    """
+
+    settings = _get_settings()
+
+    async def _run_batch(ids: list[str]) -> dict:
+        if settings.USE_MOCK_DATA:
+            raw_signals = [_load_mock_signal(sid) for sid in ids]
+        else:
+            raw_signals = []
+            for sid in ids:
+                try:
+                    raw_signals.append(await _load_signal_from_db(sid))
+                except ValueError:
+                    logger.warning("Signal not found, skipping: %s", sid)
+
+        if not raw_signals:
+            return {"total": 0, "pre_filtered": 0, "classified": 0, "failed": 0}
+
+        first = raw_signals[0]
+        prefilter = SignalPreFilter(
+            target_industries=first.get("user_target_industries", []),
+            target_roles=first.get("user_target_roles", []),
+            tracked_companies=[],
+        )
+
+        to_classify = []
+        pre_filtered_count = 0
+        for sig in raw_signals:
+            result = prefilter.screen(
+                title=sig.get("title", ""),
+                description=sig.get("description", ""),
+                company_name=sig.get("company_name", ""),
+            )
+            if not result.passes:
+                pre_filtered_count += 1
+                if settings.USE_MOCK_DATA:
+                    _mock_update_signal(sig["id"], "UNKNOWN", 0.05)
+                else:
+                    await _update_signal_classification(sig["id"], "UNKNOWN", 0.05)
+            else:
+                to_classify.append(sig)
+
+        logger.info(
+            "Pre-filter: %d/%d signals passed (%.0f%% eliminated)",
+            len(to_classify),
+            len(raw_signals),
+            (pre_filtered_count / len(raw_signals)) * 100 if raw_signals else 0,
+        )
+
+        batch_size = settings.BATCH_CLASSIFY_SIZE
+        agent = BatchSignalClassifierAgent(settings=settings)
+        classified_count = 0
+        failed_count = 0
+
+        for chunk_start in range(0, len(to_classify), batch_size):
+            chunk = to_classify[chunk_start : chunk_start + batch_size]
+            batch_input = BatchSignalClassifierInput(
+                user_id=chunk[0].get("user_id", "unknown"),
+                user_target_industries=chunk[0].get("user_target_industries", []),
+                user_target_roles=chunk[0].get("user_target_roles", []),
+                signals=[
+                    SignalBatchItem(
+                        signal_id=s["id"],
+                        title=s.get("title", ""),
+                        description=s.get("description", ""),
+                        source=s.get("source", ""),
+                        signal_date=s.get("signal_date", ""),
+                        company_name=s.get("company_name", ""),
+                    )
+                    for s in chunk
+                ],
+            )
+            try:
+                output = await agent.classify_batch(batch_input)
+                for result in output.results:
+                    if settings.USE_MOCK_DATA:
+                        _mock_update_signal(result.signal_id, result.signal_type, result.relevance_score)
+                    else:
+                        await _update_signal_classification(
+                            result.signal_id, result.signal_type, result.relevance_score
+                        )
+                    classified_count += 1
+            except Exception as exc:
+                logger.error("Batch classify chunk failed: %s", exc)
+                failed_count += len(chunk)
+
+        return {
+            "total": len(raw_signals),
+            "pre_filtered": pre_filtered_count,
+            "classified": classified_count,
+            "failed": failed_count,
+        }
+
+    try:
+        return asyncio.run(_run_batch(signal_ids))
+    except Exception as exc:
+        logger.error("batch_classify_signals_upgrade failed: %s", exc, exc_info=True)
+        raise self.retry(exc=exc)

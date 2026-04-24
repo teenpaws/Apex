@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     MOCK_AGENTS: bool = True
     USE_MOCK_DATA: bool = True
 
+    # ── Signal Classification Pipeline ───────────────────────────────────────
+    # True  → keyword pre-filter eliminates ~40-60% of signals before AI call
+    PRE_FILTER_ENABLED: bool = True
+    # Number of signals per Claude Sonnet batch classify call (max 10)
+    BATCH_CLASSIFY_SIZE: int = 10
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
