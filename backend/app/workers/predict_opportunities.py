@@ -28,6 +28,8 @@ from celery.utils.log import get_task_logger
 
 from app.core.celery_app import celery_app
 from app.core.config import get_settings
+from app.integrations.adzuna_client import AdzunaClient
+from app.services.opportunity_validator import OpportunityValidatorService
 
 logger = get_task_logger(__name__)
 
@@ -350,6 +352,47 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
             )
         else:
             opportunity_id = await _live_store_opportunity(user_id, company_id, output)
+
+            # Adzuna validation — only when real API credentials are configured
+            if (
+                not settings.ADZUNA_APP_ID.startswith("placeholder")
+                and output.predicted_role
+            ):
+                try:
+                    adzuna = AdzunaClient(
+                        app_id=settings.ADZUNA_APP_ID,
+                        app_key=settings.ADZUNA_APP_KEY,
+                        country=settings.ADZUNA_COUNTRY,
+                    )
+                    validator = OpportunityValidatorService(adzuna_client=adzuna)
+                    val_result = await validator.validate(
+                        company_name=ctx["company_name"],
+                        predicted_role=output.predicted_role,
+                    )
+                    if val_result.is_validated:
+                        import json as _json  # noqa: PLC0415
+                        import asyncpg as _asyncpg  # noqa: PLC0415
+                        import uuid as _uuid  # noqa: PLC0415
+                        from app.db.session import get_asyncpg_db_url as _get_db_url  # noqa: PLC0415
+                        _conn = await _asyncpg.connect(_get_db_url(), statement_cache_size=0)
+                        try:
+                            await _conn.execute(
+                                """
+                                UPDATE opportunities
+                                SET real_postings = $1, status = 'VALIDATED', updated_at = now()
+                                WHERE id = $2
+                                """,
+                                _json.dumps(val_result.real_postings),
+                                _uuid.UUID(opportunity_id),
+                            )
+                        finally:
+                            await _conn.close()
+                        logger.info(
+                            "Opportunity %s VALIDATED — %d Adzuna postings found",
+                            opportunity_id, len(val_result.real_postings),
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Adzuna validation skipped: %s", exc)
 
         # 4. Queue fit scoring
         logger.info(

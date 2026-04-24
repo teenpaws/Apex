@@ -29,9 +29,15 @@ export interface Opportunity {
   fit_score: number;
   key_contact_id?: string;
   signal_ids: string[];
-  status: 'PREDICTED' | 'APPROACHED' | 'INTERVIEWING' | 'CLOSED';
+  status: 'PREDICTED' | 'VALIDATED' | 'APPROACHED' | 'INTERVIEWING' | 'CLOSED';
   created_at: string;
   updated_at: string;
+  real_postings?: Array<{
+    title: string;
+    url: string;
+    company: string;
+    posted_date: string;
+  }> | null;
   // UI-friendly fields
   company?: string;
   role?: string;

@@ -134,6 +134,28 @@ export function OpportunityCard({ opportunity: opp, onClick }: OpportunityCardPr
             {opp.predictedSalary ?? opp.predicted_salary_range}
           </p>
         )}
+
+        {/* Real Posting badge — shown when Adzuna validation found matching postings */}
+        {opp.real_postings && opp.real_postings.length > 0 && (
+          <div className="mt-2 space-y-1">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400">
+              ✓ Real Posting Found
+            </span>
+            <div className="space-y-0.5">
+              {opp.real_postings.slice(0, 2).map((posting, i) => (
+                <a
+                  key={i}
+                  href={posting.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block truncate text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  {posting.title} · {posting.company}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
