@@ -2,7 +2,8 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-23 | Phase 13: COMPLETE ✅ | Phase 14: NOT STARTED | Next: Phase 14 — Post-MVP Enhancements
+> Last updated: 2026-04-24 | Phase 13: COMPLETE ✅ | Phase 14: NOT STARTED | Next: Phase 14 — Post-MVP Enhancements
+> Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
 
@@ -611,6 +612,45 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-23 | Signal sharing (company-scoped) deferred to v1.5 | Single user = no duplication cost. Requires major schema migration (`user_id` removed from signals, new join table). Explicitly flagged for v1.5 cohort architecture review. |
 | 2026-04-23 | Historical backtesting deferred to Phase 19 | Requires Adzuna integration (Phase 14) as prerequisite. Can then: fetch signals from 2-3 months ago → run pipeline → validate predictions against Adzuna historical postings. Strong product credibility tool. |
 | 2026-04-23 | Analytics page real data wiring planned for Phase 19 | Frontend analytics page is mock-only. Backend `/analytics/dashboard` endpoint exists but frontend not wired to it. Phase 19 completes the connection and replaces mock data. |
+| 2026-04-24 | Distribution model: self-host OSS, not SaaS | Motive is help-not-profit. Running a SaaS is a full-time job. Each user deploys their own instance with their own Supabase + API keys. SaaS is only revisited if HEC/sponsor funds it. Design preserves the pivot option passively (user_id-scoped data, agent_runs metering, env-var config). |
+| 2026-04-24 | Deploy path: Railway primary, Docker secondary | Railway has the smoothest one-click monorepo + Redis + workers flow for non-technical users. Docker (Phase 11 stack, polished in Phase 14) remains for offline/privacy-conscious/technical users. Native installers (Tauri/Electron) rejected — too much work for marginal gain. |
+| 2026-04-24 | Each user brings own Supabase project | Free tier (500MB DB + 500MB storage) sufficient for single-user corpus. Alternative (local Docker Postgres) would require ripping out Supabase Auth/Storage — large rework. Single `schema/initial.sql` file pasted into SQL Editor is the install contract. |
+| 2026-04-24 | Auth: keep Supabase Auth, public signups OFF by default | Zero code rewrite. Bootstrap script seeds one owner account on first install. Public-signup toggle off by default — only owner can log in. Multi-device "just works" (same credentials on laptop + phone). Flip toggle on later for cohort-sharing or SaaS pivot without code changes. |
+| 2026-04-24 | No formal release cadence; no in-app migration system | User pastes one-shot `schema/initial.sql` on install. `supabase/migrations/` folder lives in git for history only. Downstream forks reconcile changes themselves if they pull updates (with Claude's help — explicitly part of the documented support story). |
+| 2026-04-24 | License: MIT | User: "do whatever you want with it." MIT is shortest, most permissive, zero compliance burden. Matches "ship it and walk away" ethos. Not AGPL (forces forks to open-source, which user doesn't care about). Not Apache (patent grant clauses irrelevant for this scope). |
+| 2026-04-24 | Phases 20–24 added — multi-user self-host enablement | Phase 20 (foundations), 21 (Railway template), 22 (first-run setup UX), 23 (docs + screenshots), 24 (launch polish). Phases 21 + 22 run in parallel after 20; 23 needs screenshots from both; 24 is the launch. Full spec: `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`. |
+
+---
+
+## 11.5 Distribution Strategy (Post-Phase-19)
+
+Apex ships as **open-source, self-host, bring-your-own-keys**. Swapneet runs no infrastructure and pays no ongoing cost.
+
+### User Deployment Flow
+1. Create own Supabase project (free)
+2. Paste `schema/initial.sql` into Supabase SQL Editor
+3. Sign up for API keys: Anthropic, OpenAI, NewsData, GNews, PDL, Hunter (all free tier for personal use)
+4. Click "Deploy on Railway" button in README → Railway forks repo, provisions services from `railway.json`
+5. Paste env vars into Railway UI
+6. First login runs bootstrap (seeds owner account from `OWNER_EMAIL` + `OWNER_PASSWORD`)
+7. If any keys missing/invalid, `/setup` wizard walks user through fixes
+
+**Total install time:** ~30–45 minutes for a non-technical user following the QUICKSTART with screenshots.
+**Ongoing cost to user:** ~$10–30/month (~$5–10 Railway + ~$5–20 Anthropic; rest free tier).
+**Ongoing cost to Swapneet:** $0.
+
+### Distribution Constraints
+- No customer support beyond GitHub Issues. "Paste the error into Claude" is the documented troubleshooting pattern.
+- No versioned releases. Public repo; users fork whenever they want the latest code.
+- MIT license — anyone can fork, modify, rebrand, or sell without obligation.
+
+### SaaS Pivot Readiness (Passive)
+- All queries `user_id`-scoped with RLS
+- `agent_runs` writes on every AI call (cost metering precondition)
+- Env-var config (no hardcoded values)
+- Public-signup toggle is the single switch to enable multi-user install
+
+If HEC or a sponsor ever funds hosting, the pivot requires adding billing/ingress — no core architecture changes.
 
 ---
 

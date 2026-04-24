@@ -1,7 +1,8 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-23 | Current Phase: **Phase 14 — Post-MVP Enhancements** | NOT STARTED 🔲
+> Last updated: 2026-04-24 | Current Phase: **Phase 14 — Post-MVP Enhancements** | NOT STARTED 🔲
+> Multi-user self-host distribution (Phases 20–24) planned — see `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
 
@@ -30,8 +31,13 @@
 | 17 | Outreach Expansion | LinkedIn message gen, PDL URL surfacing, outreach channel routing | 1 | 1 | 1 | 2–3 |
 | 18 | Signal Quality & Disambiguation | Domain-qualified search queries, pre-filter entity context matching | 1 | 0 | 1 | 2 |
 | 19 | Analytics + Historical Backtesting | Wire analytics FE to real BE, backtesting framework (requires Phase 14 Adzuna) | 1 | 1 | 1 | 2–3 |
+| 20 | Self-Host Foundations | Consolidated `initial.sql`, owner-bootstrap script, hardcode/config audit, SaaS-pivot readiness check | 1 | 0 | 1 | 2 |
+| 21 | Railway Deploy Template | `railway.json`, service config, "Deploy on Railway" button, end-to-end smoke test | 1 | 0 | 1 | 1–2 |
+| 22 | First-Run Setup Experience | `/system/status` endpoint, per-integration health tests, `/setup` wizard in FE | 1 | 1 | 1 | 2 |
+| 23 | Non-Technical User Docs | `QUICKSTART.md` rewrite with screenshots, `API-KEYS.md`, `TROUBLESHOOTING.md`, `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md` | 0 | 0 | 1 | 1–2 |
+| 24 | Public Launch Polish | README polish + screenshots, GitHub Issues templates, CI for forks, optional anonymous install counter, demo seed data, cohort announcement | 1 | 1 | 1 | 1–2 |
 
-**Total estimated sessions (with ~2hr model limit each): 52–67 sessions**
+**Total estimated sessions (with ~2hr model limit each): 60–80 sessions**
 
 ---
 
@@ -1526,6 +1532,205 @@ Before passing a signal to the classifier, check that the signal is actually abo
 
 ---
 
+## Phase 20: Self-Host Foundations
+
+**Goal:** Make the codebase safe to clone, deploy, and operate by someone who is not Swapneet.
+
+**Status:** 🔲 NOT STARTED
+
+**Design reference:** `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
+
+---
+
+### Sprint 20.1 — Consolidated Schema + Bootstrap Script
+
+**Deliverables:**
+- `schema/initial.sql` — single file that creates ALL tables, RLS policies, `pgvector` extension, indexes, and seed reference data from an empty Supabase project. Must be idempotent-within-a-single-run (wrapped in `DO $$ ... $$` blocks where needed).
+- Tested: paste into a fresh Supabase project → app boots → basic flows work (login, signal list, ingestion trigger)
+- `scripts/bootstrap_owner.py` — reads `OWNER_EMAIL` + `OWNER_PASSWORD` from env, creates one Supabase Auth user via the service-role key, inserts matching `users` row
+- Backend startup hook: if no owner exists, log clear instructions (`Run: python scripts/bootstrap_owner.py`) and refuse to serve authenticated endpoints
+
+**Tests:**
+- Integration: run `initial.sql` against a test Supabase project, assert all expected tables/policies/indexes exist
+- Unit: bootstrap script is idempotent (running twice doesn't create duplicates)
+
+---
+
+### Sprint 20.2 — Hardcode Audit + SaaS-Pivot Readiness
+
+**Deliverables:**
+- Grep audit report: zero hardcoded user IDs, user names, HEC-specific strings, or absolute filesystem paths in any non-prompt code path. Prompt templates may reference the MBA persona (that's intentional for v1.0 — see v1.5 deferral note).
+- Config audit: every API key, URL, feature flag, and dev-only value reads from environment variables. `.env.example` lists every variable with a comment describing what it does.
+- SaaS-pivot readiness checklist (documented in `docs/saas-pivot-readiness.md`):
+  - ✅ All queries `user_id`-scoped
+  - ✅ RLS policies enforce isolation
+  - ✅ `agent_runs` writes on every agent call (cost metering precondition)
+  - ✅ `MOCK_AGENTS` and `USE_MOCK_DATA` gate all dev-only paths
+  - ✅ Supabase public-signup toggle is the only switch needed to enable multi-user install
+- Remove `login.json`, any committed test fixtures containing real credentials
+
+**Tests:**
+- CI job that greps for common leak patterns (hardcoded emails, absolute Windows paths `E:\`, `localhost` in non-dev files)
+
+---
+
+## Phase 21: Railway Deploy Template
+
+**Goal:** "Deploy on Railway" button in README works end-to-end from a fresh fork with no manual steps beyond pasting env vars.
+
+**Status:** 🔲 NOT STARTED
+
+**Depends on:** Phase 20 complete.
+
+---
+
+### Sprint 21.1 — Railway Service Configuration
+
+**Deliverables:**
+- `railway.json` defining four services: `backend` (web), `celery-worker`, `redis` (managed), `frontend`
+- Per-service build command, start command, health check endpoint, resource limits
+- Service-to-service URL wiring: backend reads `REDIS_URL` from Railway's managed Redis; frontend reads `NEXT_PUBLIC_API_URL` from backend's public Railway domain
+- `railway-env.md` listing every env var Railway needs, grouped by integration, with per-variable "where to get this" notes and links to `API-KEYS.md`
+- "Deploy on Railway" markdown button snippet ready for README (Phase 24 inserts it)
+
+---
+
+### Sprint 21.2 — End-to-End Deploy Smoke Test
+
+**Deliverables:**
+- From a completely fresh fork: click deploy → authenticate with Railway → paste env vars from a prepared test set → wait for build → all four services running green
+- Frontend loads, login works, signal ingestion can be triggered, Celery worker consumes the job, Redis is reachable
+- Documented gotchas (cold-start time, any manual post-deploy steps) in `railway-notes.md`
+
+**Tests:**
+- Manual end-to-end: run the full flow at least once from scratch; note time-to-first-successful-login
+- Automated: Playwright smoke test that runs against a Railway preview deployment (optional stretch goal)
+
+---
+
+## Phase 22: First-Run Setup Experience
+
+**Goal:** A newly-deployed install tells the user exactly what's missing and how to fix it, without requiring them to read documentation first.
+
+**Status:** 🔲 NOT STARTED
+
+**Depends on:** Phase 20 complete. Runs in parallel with Phase 21.
+
+---
+
+### Sprint 22.1 — System Status Endpoint
+
+**Deliverables:**
+- `GET /api/v1/system/status` — authenticated owner-only endpoint returning per-integration health:
+  ```json
+  {
+    "anthropic":  {"status": "ok"},
+    "openai":     {"status": "ok"},
+    "newsdata":   {"status": "missing_key"},
+    "gnews":      {"status": "invalid_key", "error": "HTTP 403: ..."},
+    "pdl":        {"status": "ok"},
+    "hunter":     {"status": "unreachable", "error": "connection timeout"},
+    "supabase":   {"status": "ok"},
+    "gmail_oauth":{"status": "not_configured"}
+  }
+  ```
+- Each integration test is a lightweight call (Anthropic `list_models`, NewsData 1-article fetch, etc.) cached for 60 seconds to avoid repeated calls
+- Clear error messages in `error` field so user can paste directly into Claude for troubleshooting
+
+**Tests:**
+- Unit: status for each integration when key missing / invalid / ok
+- Integration: endpoint returns expected shape; caching works
+
+---
+
+### Sprint 22.2 — `/setup` Wizard Frontend
+
+**Deliverables:**
+- First-login detection: if `/system/status` reports any `missing_key` or `invalid_key` for critical integrations, redirect to `/setup` instead of `/dashboard`
+- `/setup` page: one card per integration with (a) what the key does, (b) link to signup page, (c) instructions to paste into Railway's env var UI with a screenshot, (d) "Re-check" button that re-runs `/system/status`
+- Visual progress: checked-off integrations show green, remaining show amber, "You're all set" state when everything is ok
+- Skip-and-continue option for non-critical integrations (Gmail OAuth, Hunter) — user can wire them later
+
+**Tests:**
+- Playwright: simulate missing keys → wizard renders → adding a key and re-checking updates the state → all-green redirects to Dashboard
+
+---
+
+## Phase 23: Non-Technical User Documentation
+
+**Goal:** A first-time user with no CS background can deploy and start using Apex from the README in under 45 minutes.
+
+**Status:** 🔲 NOT STARTED
+
+**Depends on:** Phases 21 + 22 complete (need real deploy + wizard to screenshot).
+
+---
+
+### Sprint 23.1 — Core Installation Docs
+
+**Deliverables:**
+- `QUICKSTART.md` rewritten with step-by-step instructions and screenshots for:
+  1. Supabase signup (screenshot the signup page)
+  2. Creating a new Supabase project (screenshot)
+  3. Pasting `schema/initial.sql` into the SQL Editor (screenshot)
+  4. Copying Supabase URL + keys from the dashboard (screenshot)
+  5. Signing up for each API key (Anthropic, OpenAI, NewsData, GNews, PDL, Hunter) — one section each
+  6. Clicking the "Deploy on Railway" button (screenshot)
+  7. Pasting env vars into Railway's UI (screenshot)
+  8. Waiting for build + first login
+  9. Using the in-app setup wizard if anything is missing
+- `API-KEYS.md` with per-provider signup flow + "where to find the key" screenshots
+
+---
+
+### Sprint 23.2 — Supporting Docs
+
+**Deliverables:**
+- `TROUBLESHOOTING.md` with common errors and fixes, plus the "paste the error into Claude" pattern documented explicitly
+- `LICENSE` — MIT
+- `CONTRIBUTING.md` — how to fork, PR conventions, testing requirements (light touch, no heavy process)
+- `SECURITY.md` — how to report security issues privately, rotation guidance for leaked keys
+- Optional: 5–10 minute screencast walkthrough linked from README
+
+---
+
+## Phase 24: Public Launch Polish
+
+**Goal:** Repo is ready to share publicly with MBA cohorts, on LinkedIn, and via any other channels.
+
+**Status:** 🔲 NOT STARTED
+
+**Depends on:** Phases 20–23 complete.
+
+---
+
+### Sprint 24.1 — Repo Polish
+
+**Deliverables:**
+- README rewrite with:
+  - Hero image or GIF showing the dashboard
+  - One-paragraph value proposition
+  - "Deploy on Railway" button (from Phase 21) prominently placed
+  - Feature list with screenshots of key pages (Signals, Opportunities, Actions, Outreach)
+  - Install paths: Railway primary / Docker secondary
+  - Link to `QUICKSTART.md` for the full walkthrough
+- `.github/ISSUE_TEMPLATE/`: bug report, feature request, question
+- `.github/workflows/ci.yml`: run backend tests on PRs (helps fork maintainers verify their changes)
+
+---
+
+### Sprint 24.2 — Launch Features + Announcement
+
+**Deliverables:**
+- `DEMO_MODE=true` env flag loads a curated sample data set (20 signals, 5 opportunities, 8 actions, 3 outreach drafts) so first-time users see the product working immediately
+- Optional opt-in anonymous install counter: if `TELEMETRY_OPT_IN=true`, backend pings a public endpoint on first boot with `{version, deploy_platform}` — purely for Swapneet's curiosity. Disabled by default; documented in `SECURITY.md`.
+- Cohort announcement:
+  - LinkedIn post draft
+  - HEC MBA cohort Slack/email post draft
+  - Any other channels Swapneet chooses
+
+---
+
 ## Progress Tracker
 
 ### By Phase
@@ -1553,8 +1758,13 @@ Before passing a signal to the classifier, check that the signal is actually abo
 | 17 | 🔲 Not Started | 0/3 | Outreach Expansion: LinkedIn message gen + channel routing |
 | 18 | 🔲 Not Started | 0/2 | Signal Disambiguation: domain-qualified queries, pre-filter entity check |
 | 19 | 🔲 Not Started | 0/3 | Analytics real data + historical backtesting |
+| 20 | 🔲 Not Started | 0/2 | Self-Host Foundations: consolidated `initial.sql`, owner-bootstrap script, hardcode/config audit |
+| 21 | 🔲 Not Started | 0/2 | Railway Deploy Template: `railway.json`, "Deploy on Railway" button, E2E smoke test |
+| 22 | 🔲 Not Started | 0/2 | First-Run Setup Experience: `/system/status`, per-integration health, `/setup` wizard |
+| 23 | 🔲 Not Started | 0/2 | Non-Technical Docs: `QUICKSTART.md` with screenshots, `API-KEYS.md`, LICENSE (MIT), etc. |
+| 24 | 🔲 Not Started | 0/2 | Public Launch Polish: README, Issues templates, CI, demo mode, cohort announcement |
 
-**Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions.
+**Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions. Phases 21 and 22 can run in parallel after Phase 20.
 
 ---
 
@@ -1615,11 +1825,29 @@ Phase 15        Phase 16          Phase 17
             ↓
        Phase 19 (Analytics + Backtesting)
        [requires Phase 14.2 Adzuna]
+            ↓
+       Phase 20 (Self-Host Foundations)
+            ↓
+     ┌──────┴──────┐
+     ↓             ↓
+Phase 21      Phase 22
+(Railway     (First-Run
+ Template)    Setup UX)
+     └──────┬──────┘
+            ↓
+       Phase 23 (Non-Technical Docs)
+       [needs screenshots from 21 + 22]
+            ↓
+       Phase 24 (Public Launch Polish)
 ```
 
 > Phases 15, 16, 17 are independent of each other and can run in parallel.
 > Phase 18 requires Phase 14.1 (keyword pre-filter) as its foundation.
 > Phase 19 requires Phase 14.2 (Adzuna) for the backtesting sprint.
+> Phase 20 is the foundation for all multi-user self-host work.
+> Phases 21 and 22 can run in parallel after Phase 20.
+> Phase 23 depends on both 21 and 22 (documentation screenshots).
+> Phase 24 depends on everything above.
 
 ---
 
