@@ -50,4 +50,9 @@ AGENT_REGISTRY: dict[str, AgentConfig] = {
         "version": "1.0",
         "prompt_file": "prompts/action_generator_v1.txt",
     },
+    "batch_signal_classifier": {
+        "model": "claude-sonnet-4-6",
+        "version": "1.0",
+        "prompt_file": "prompts/batch_signal_classifier_v1.txt",
+    },
 }
