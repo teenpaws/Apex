@@ -3,14 +3,17 @@
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowRight, Sparkles, Clock, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, Sparkles, Clock, User, Play } from 'lucide-react';
 import { PipelineViz } from '@/components/shared/PipelineViz';
+import { PipelineProgressBar } from '@/components/shared/PipelineProgressBar';
 import { SkeletonCard } from '@/components/shared/SkeletonCard';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { useSignals } from '@/hooks/useSignals';
 import { useOpportunities } from '@/hooks/useOpportunities';
 import { useActions } from '@/hooks/useActions';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
+import { usePipelineRun } from '@/hooks/usePipelineRun';
 
 const signalTypeColor: Record<string, string> = {
   FUNDING:             'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
@@ -51,6 +54,7 @@ export default function DashboardPage() {
   const oppsQuery = useOpportunities({ confidence: 'HIGH', per_page: 3 });
   const actionsQuery = useActions({ status: 'TODO,IN_PROGRESS', per_page: 3 });
   const statsQuery = useDashboardStats();
+  const { runId, isRunning, error: pipelineError, startPipeline, handleComplete, handleError } = usePipelineRun();
 
   const recentSignals = signalsQuery.data?.data ?? [];
   const topOpps = oppsQuery.data?.data ?? [];
@@ -58,6 +62,29 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Pipeline control */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Market Intelligence Pipeline</h2>
+          <p className="text-sm text-muted-foreground">Ingest signals, classify, predict opportunities, and generate actions.</p>
+        </div>
+        <Button
+          onClick={startPipeline}
+          disabled={isRunning}
+          className="gap-2 bg-violet-600 hover:bg-violet-700"
+        >
+          {isRunning ? 'Running...' : <><Play className="h-4 w-4" />Run Pipeline</>}
+        </Button>
+      </div>
+      {runId && (
+        <PipelineProgressBar
+          runId={runId}
+          onComplete={() => { handleComplete(); signalsQuery.refetch(); oppsQuery.refetch(); actionsQuery.refetch(); }}
+          onError={handleError}
+        />
+      )}
+      {pipelineError && <p className="text-sm text-red-400">{pipelineError}</p>}
+
       {/* Pipeline Visualization */}
       <PipelineViz stats={statsQuery.data} />
 
