@@ -27,7 +27,7 @@ AGENT_REGISTRY: dict[str, AgentConfig] = {
     },
     "opportunity_predictor": {
         "model": "claude-sonnet-4-6",
-        "version": "1.0",
+        "version": "1.1",
         "prompt_file": "prompts/opportunity_predictor_v1.txt",
     },
     "career_fit_scorer": {
@@ -49,5 +49,10 @@ AGENT_REGISTRY: dict[str, AgentConfig] = {
         "model": "claude-haiku-4-5-20251001",
         "version": "1.0",
         "prompt_file": "prompts/action_generator_v1.txt",
+    },
+    "batch_signal_classifier": {
+        "model": "claude-sonnet-4-6",
+        "version": "1.0",
+        "prompt_file": "prompts/batch_signal_classifier_v1.txt",
     },
 }

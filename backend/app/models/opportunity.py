@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Text, Float, Integer, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -44,6 +44,7 @@ class OpportunityORM(Base):
     signal_ids: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)), nullable=False, default=list
     )
+    real_postings: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True, default=None)
     status: Mapped[str] = mapped_column(
         Text, nullable=False, default=OpportunityStatus.PREDICTED.value
     )
@@ -73,6 +74,7 @@ class OpportunityCreate(BaseModel):
     key_contact_id: uuid.UUID | None = None
     signal_ids: list[uuid.UUID] = Field(default_factory=list)
     status: OpportunityStatus = OpportunityStatus.PREDICTED
+    real_postings: list[dict] | None = None
 
 
 class OpportunityRead(BaseModel):
@@ -94,6 +96,7 @@ class OpportunityRead(BaseModel):
     status: OpportunityStatus
     created_at: datetime
     updated_at: datetime
+    real_postings: list[dict] | None = None
 
 
 class OpportunityUpdate(BaseModel):
@@ -110,3 +113,4 @@ class OpportunityUpdate(BaseModel):
     key_contact_id: uuid.UUID | None = None
     signal_ids: list[uuid.UUID] | None = None
     status: OpportunityStatus | None = None
+    real_postings: list[dict] | None = None

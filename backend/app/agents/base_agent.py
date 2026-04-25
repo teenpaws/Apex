@@ -104,6 +104,7 @@ class BaseAgent(ABC):
         prompt: str,
         model: str,
         system: str = "",
+        thinking_budget: int = 0,
     ) -> str:
         """
         Call the Anthropic Claude API with automatic retry (3x exponential backoff).
@@ -112,13 +113,15 @@ class BaseAgent(ABC):
         should check self._mock_mode before calling this method.
 
         Args:
-            prompt:  User-turn message content.
-            model:   Model identifier from AGENT_REGISTRY (never hardcoded).
-            system:  Optional system prompt. Prompt caching is enabled on this
-                     parameter to reduce costs on repeated calls.
+            prompt:          User-turn message content.
+            model:           Model identifier from AGENT_REGISTRY (never hardcoded).
+            system:          Optional system prompt. Prompt caching enabled on this.
+            thinking_budget: When > 0, enables extended thinking with this token budget.
+                             Only supported on claude-sonnet-4-6 and claude-opus-4-7.
+                             Adds ~3x token cost — use only for complex reasoning agents.
 
         Returns:
-            Raw text response from Claude.
+            Raw text response from Claude (thinking blocks excluded).
 
         Raises:
             NotImplementedError: Always raised in mock mode.
@@ -149,7 +152,9 @@ class BaseAgent(ABC):
             try:
                 kwargs: dict[str, Any] = {
                     "model": model,
-                    "max_tokens": 4096,
+                    # When extended thinking is enabled, max_tokens must exceed
+                    # budget_tokens — use 16000 to give the response room.
+                    "max_tokens": 16000 if thinking_budget > 0 else 4096,
                     "messages": messages,
                 }
                 if system:
@@ -162,9 +167,20 @@ class BaseAgent(ABC):
                             "cache_control": {"type": "ephemeral"},
                         }
                     ]
+                if thinking_budget > 0:
+                    kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": thinking_budget,
+                    }
 
                 response = await client.messages.create(**kwargs)
-                return response.content[0].text
+
+                # Extract text content — skip thinking blocks which appear first
+                # when extended thinking is enabled.
+                for block in response.content:
+                    if getattr(block, "type", None) == "text":
+                        return block.text
+                return ""
 
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc

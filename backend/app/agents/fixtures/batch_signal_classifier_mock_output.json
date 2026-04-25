@@ -1,0 +1,11 @@
+{
+  "results": [
+    {
+      "signal_id": "mock-signal-1",
+      "signal_type": "FUNDING",
+      "relevance_score": 0.85,
+      "key_facts": ["Company raised $50M Series B", "Led by Sequoia Capital", "Plans to double headcount in EMEA"],
+      "reasoning": "Funding round in fintech directly relevant to user's target sector."
+    }
+  ]
+}

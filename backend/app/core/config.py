@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     PDL_API_KEY: str = "placeholder-pdl-key"             # peopledatalabs.com — 1k free/mo
     HUNTER_API_KEY: str = "placeholder-hunter-key"       # hunter.io — 25 free/mo (email finding)
 
+    # ── Adzuna Job Board (opportunity validation — free API) ──────────────────
+    ADZUNA_APP_ID: str = "placeholder-adzuna-app-id"
+    ADZUNA_APP_KEY: str = "placeholder-adzuna-app-key"
+    ADZUNA_COUNTRY: str = "gb"
+
     # ── Redis / Celery ────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
@@ -59,6 +64,12 @@ class Settings(BaseSettings):
     # False → live mode; requires real keys and a running Supabase project
     MOCK_AGENTS: bool = True
     USE_MOCK_DATA: bool = True
+
+    # ── Signal Classification Pipeline ───────────────────────────────────────
+    # True  → keyword pre-filter eliminates ~40-60% of signals before AI call
+    PRE_FILTER_ENABLED: bool = True
+    # Number of signals per Claude Sonnet batch classify call (max 10)
+    BATCH_CLASSIFY_SIZE: int = Field(default=10, ge=1, le=10)
 
     model_config = SettingsConfigDict(
         env_file=".env",

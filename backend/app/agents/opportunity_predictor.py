@@ -155,6 +155,7 @@ class OpportunityPredictorAgent(BaseAgent):
             prompt=user_message,
             model=self._model,
             system=self._system_prompt,
+            thinking_budget=8000,
         )
         output = self._parse_response(raw_text)
 
