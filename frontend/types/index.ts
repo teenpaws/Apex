@@ -24,7 +24,7 @@ export interface Opportunity {
   confidence: 'HIGH' | 'MEDIUM' | 'SPECULATIVE';
   timeline_weeks: number;
   why_fit: string;
-  positioning_notes: string;
+  approach_angle: string;
   predicted_salary_range?: string;
   fit_score: number;
   key_contact_id?: string;

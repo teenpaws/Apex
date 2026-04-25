@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
     confidence              text NOT NULL,          -- HIGH|MEDIUM|SPECULATIVE
     timeline_weeks          int,
     why_fit                 text,
-    positioning_notes       text,
+    approach_angle          text,
     predicted_salary_range  text,
     fit_score               float,
     key_contact_id          uuid REFERENCES contacts(id) ON DELETE SET NULL,
@@ -461,6 +461,21 @@ CREATE TABLE IF NOT EXISTS user_documents (
 CREATE INDEX IF NOT EXISTS idx_user_documents_user_id ON user_documents(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_documents_doc_type ON user_documents(user_id, doc_type);
 
+-- Enable Row Level Security — users can only access their own documents.
+ALTER TABLE user_documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS user_documents_select_own
+  ON user_documents FOR SELECT
+  USING (user_id = auth.uid()::uuid);
+
+CREATE POLICY IF NOT EXISTS user_documents_insert_own
+  ON user_documents FOR INSERT
+  WITH CHECK (user_id = auth.uid()::uuid);
+
+CREATE POLICY IF NOT EXISTS user_documents_delete_own
+  ON user_documents FOR DELETE
+  USING (user_id = auth.uid()::uuid);
+
 -- ============================================================
 -- Migration 016: extend career_profiles (Phase 15)
 -- ============================================================
@@ -480,5 +495,14 @@ ALTER TABLE career_profiles
 -- ============================================================
 -- Migration 017: rename positioning_notes to approach_angle (Phase 15)
 -- ============================================================
-ALTER TABLE opportunities
-  RENAME COLUMN positioning_notes TO approach_angle;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'opportunities' AND column_name = 'positioning_notes'
+  ) THEN
+    ALTER TABLE opportunities RENAME COLUMN positioning_notes TO approach_angle;
+    COMMENT ON COLUMN opportunities.approach_angle IS
+      '1-sentence strategic seed from OpportunityPredictor for the PositioningAdvisor to elaborate on.';
+  END IF;
+END $$;

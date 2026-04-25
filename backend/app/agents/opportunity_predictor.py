@@ -79,7 +79,7 @@ class OpportunityPredictorOutput(BaseModel):
     why_fit: str = Field(
         description="2-3 sentences explaining why the user's background fits"
     )
-    positioning_notes: str = Field(
+    approach_angle: str = Field(
         description="1-2 sentences on what angle the user should lead with"
     )
     ideal_contact_title: str = Field(

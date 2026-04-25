@@ -138,7 +138,7 @@ async def _live_load_opportunity_full(opportunity_id: str, user_id: str) -> dict
         opp_row = await conn.fetchrow(
             """
             SELECT o.predicted_role, o.confidence, o.timeline_weeks, o.why_fit,
-                   o.positioning_notes, o.fit_score, o.company_id,
+                   o.approach_angle, o.fit_score, o.company_id,
                    c.name AS company_name
             FROM opportunities o
             LEFT JOIN companies c ON c.id = o.company_id

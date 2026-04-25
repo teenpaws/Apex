@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
     confidence              text NOT NULL,          -- HIGH|MEDIUM|SPECULATIVE
     timeline_weeks          int,
     why_fit                 text,
-    positioning_notes       text,
+    approach_angle          text,   -- renamed from positioning_notes (Migration 017)
     predicted_salary_range  text,
     fit_score               float,
     key_contact_id          uuid REFERENCES contacts(id) ON DELETE SET NULL,

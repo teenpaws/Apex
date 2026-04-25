@@ -226,13 +226,13 @@ async def seed_demo() -> None:
             )
         logger.info("Seeded %d demo signals", len(DEMO_SIGNALS))
 
-        # Opportunities — note: DB column is positioning_notes (legacy name)
+        # Opportunities — DB column is approach_angle (renamed from positioning_notes in Migration 017)
         for opp in DEMO_OPPORTUNITIES:
             await conn.execute(
                 """
                 INSERT INTO opportunities (id, user_id, company_id, predicted_role,
                                            confidence, timeline_weeks, why_fit,
-                                           positioning_notes, fit_score, status,
+                                           approach_angle, fit_score, status,
                                            signal_ids, predicted_salary_range)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 ON CONFLICT (id) DO NOTHING

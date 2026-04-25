@@ -43,7 +43,7 @@ const mockOpp: Opportunity = {
   confidence: 'HIGH',
   timeline_weeks: 6,
   why_fit: 'Strong MBA background + AI sector experience.',
-  positioning_notes: 'Lead with your HEC network.',
+  approach_angle: 'Lead with your HEC network.',
   predicted_salary_range: '€120k–€160k + equity',
   fit_score: 87,
   key_contact_id: 'ct1',

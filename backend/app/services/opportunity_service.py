@@ -94,7 +94,7 @@ class OpportunityService:
             rows = await conn.fetch(
                 f'''SELECT o.id, o.user_id, o.company_id, o.predicted_role,
                            o.confidence, o.timeline_weeks, o.why_fit,
-                           o.positioning_notes, o.predicted_salary_range,
+                           o.approach_angle, o.predicted_salary_range,
                            o.fit_score, o.signal_ids, o.status,
                            o.created_at, o.updated_at,
                            c.name as company_name
@@ -118,7 +118,7 @@ class OpportunityService:
                     'confidence': r['confidence'],
                     'timeline_weeks': r['timeline_weeks'],
                     'why_fit': r['why_fit'],
-                    'positioning_notes': r['positioning_notes'],
+                    'approach_angle': r['approach_angle'],
                     'predicted_salary_range': r['predicted_salary_range'] or '',
                     'fit_score': float(r['fit_score'] or 0),
                     'status': r['status'],
@@ -188,7 +188,7 @@ class OpportunityService:
             row = await conn.fetchrow(
                 '''SELECT o.id, o.user_id, o.company_id, o.predicted_role,
                           o.confidence, o.timeline_weeks, o.why_fit,
-                          o.positioning_notes, o.predicted_salary_range,
+                          o.approach_angle, o.predicted_salary_range,
                           o.fit_score, o.signal_ids, o.status,
                           o.created_at, o.updated_at,
                           c.name as company_name
@@ -207,7 +207,7 @@ class OpportunityService:
                 'confidence': row['confidence'],
                 'timeline_weeks': row['timeline_weeks'],
                 'why_fit': row['why_fit'],
-                'positioning_notes': row['positioning_notes'],
+                'approach_angle': row['approach_angle'],
                 'predicted_salary_range': row['predicted_salary_range'] or '',
                 'fit_score': float(row['fit_score'] or 0),
                 'status': row['status'],

@@ -23,3 +23,18 @@ CREATE INDEX IF NOT EXISTS idx_user_documents_doc_type ON user_documents(user_id
 
 COMMENT ON TABLE user_documents IS 'User-uploaded documents (resume, cover letters) with extracted text and staging area for profile extraction output.';
 COMMENT ON COLUMN user_documents.staging_json IS 'ProfileExtractor output awaiting user approval — written to career_profiles on approve.';
+
+-- Enable Row Level Security — users can only access their own documents.
+ALTER TABLE user_documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS user_documents_select_own
+  ON user_documents FOR SELECT
+  USING (user_id = auth.uid()::uuid);
+
+CREATE POLICY IF NOT EXISTS user_documents_insert_own
+  ON user_documents FOR INSERT
+  WITH CHECK (user_id = auth.uid()::uuid);
+
+CREATE POLICY IF NOT EXISTS user_documents_delete_own
+  ON user_documents FOR DELETE
+  USING (user_id = auth.uid()::uuid);

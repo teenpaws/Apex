@@ -34,7 +34,7 @@ class OpportunitySummary(BaseModel):
     predicted_role: str
     confidence: str
     why_fit: str
-    positioning_notes: str = ""
+    approach_angle: str = ""
 
 
 class UserProfileForScoring(BaseModel):

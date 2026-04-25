@@ -44,7 +44,7 @@ class ContactForEmail(BaseModel):
 class OpportunityForEmail(BaseModel):
     predicted_role: str
     why_fit: str
-    positioning_notes: str = ""
+    approach_angle: str = ""
 
 
 class UserProfileForEmail(BaseModel):

@@ -33,7 +33,7 @@ def _mba_strategy_input() -> dict:
             "predicted_role": "VP of Strategy",
             "confidence": "HIGH",
             "why_fit": "MBA background aligns with strategy leadership needs.",
-            "positioning_notes": "Lead with HEC Paris network.",
+            "approach_angle": "Lead with HEC Paris network.",
         },
         "user_profile": {
             "current_role": "Senior Strategy Consultant",
@@ -54,7 +54,7 @@ def _weak_fit_input() -> dict:
             "predicted_role": "Senior Software Engineer (ML Infrastructure)",
             "confidence": "MEDIUM",
             "why_fit": "Company is building ML infra team.",
-            "positioning_notes": "Technical background needed.",
+            "approach_angle": "Technical background needed.",
         },
         "user_profile": {
             "current_role": "Marketing Manager",
