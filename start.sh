@@ -70,7 +70,10 @@ done
 
 # 5. Seed demo data
 echo "Seeding demo data (5 companies, 5 signals, 3 opportunities)..."
-docker-compose exec backend python -m app.db.seeds.seed_demo || echo "Demo seed skipped (may already exist)"
+if ! docker-compose exec backend python -m app.db.seeds.seed_demo 2>&1; then
+    echo "WARNING: Demo seed encountered an error. This is OK if data already exists."
+    echo "To debug: docker-compose exec backend python -m app.db.seeds.seed_demo"
+fi
 
 echo ""
 echo -e "${GREEN}=== Apex is ready! ===${NC}"

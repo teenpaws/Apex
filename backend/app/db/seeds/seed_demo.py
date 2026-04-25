@@ -177,6 +177,21 @@ async def seed_demo() -> None:
     conn = await asyncpg.connect(db_url, statement_cache_size=0)
 
     try:
+        # User must exist before signals/opportunities (FK constraint)
+        await conn.execute(
+            """
+            INSERT INTO users (id, email, full_name, profile_json, preferences_json)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            uuid.UUID(DEMO_USER_ID),
+            "demo@apex.dev",
+            "Demo User",
+            "{}",
+            "{}",
+        )
+        logger.info("Seeded demo user")
+
         # Companies
         for co in DEMO_COMPANIES:
             await conn.execute(
