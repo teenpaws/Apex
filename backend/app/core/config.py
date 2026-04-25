@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # True  → keyword pre-filter eliminates ~40-60% of signals before AI call
     PRE_FILTER_ENABLED: bool = True
     # Number of signals per Claude Sonnet batch classify call (max 10)
-    BATCH_CLASSIFY_SIZE: int = 10
+    BATCH_CLASSIFY_SIZE: int = Field(default=10, ge=1, le=10)
 
     model_config = SettingsConfigDict(
         env_file=".env",

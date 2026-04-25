@@ -439,7 +439,7 @@ def classify_and_embed(signal_id: str) -> dict[str, Any]:
     default_retry_delay=60,
     queue="default",
 )
-def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict:
+def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict[str, Any]:
     """
     Upgraded batch signal classification: pre-filter → Sonnet batch.
 
@@ -452,7 +452,7 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict:
 
     settings = _get_settings()
 
-    async def _run_batch(ids: list[str]) -> dict:
+    async def _run_batch(ids: list[str]) -> dict[str, Any]:
         if settings.USE_MOCK_DATA:
             raw_signals = [_load_mock_signal(sid) for sid in ids]
         else:
@@ -466,6 +466,8 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict:
         if not raw_signals:
             return {"total": 0, "pre_filtered": 0, "classified": 0, "failed": 0}
 
+        # Assumes all signal_ids belong to the same user (enforced by caller in v1.0).
+        # At v1.5 multi-user, pass user_id as an explicit task parameter instead.
         first = raw_signals[0]
         prefilter = SignalPreFilter(
             target_industries=first.get("user_target_industries", []),
@@ -531,7 +533,7 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict:
                         )
                     classified_count += 1
             except Exception as exc:
-                logger.error("Batch classify chunk failed: %s", exc)
+                logger.error("Batch classify chunk failed: %s", exc, exc_info=True)
                 failed_count += len(chunk)
 
         return {

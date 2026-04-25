@@ -557,7 +557,7 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 - No structured logging format yet — add OpenTelemetry spans in v1.5
 - No API versioning strategy beyond `/v1/` — define `/v2/` migration plan before v1.5
 - `preferences_json` on users table is a grab-bag — normalize into proper columns in v1.5
-- `positioning_notes` column name in DB (legacy) — rename to `approach_angle` in Phase 14 migration
+- `positioning_notes` column name in DB (legacy) — rename to `approach_angle` was planned for Phase 14 but not executed (migration not added); defer to Phase 15
 
 ---
 
