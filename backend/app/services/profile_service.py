@@ -119,3 +119,17 @@ class ProfileService:
             if value is not None:
                 profile[key] = value
         return profile
+
+    # ── Phase 15 stubs — implemented in Task 5 ───────────────────────────────
+
+    async def get_pending_review(self) -> dict:
+        """Return staged extraction output awaiting user approval (Task 5)."""
+        if self.use_mock:
+            return {"has_pending": False, "staged": None}
+        return {"has_pending": False, "staged": None}
+
+    async def approve_extraction(self) -> dict:
+        """Apply staged extraction fields to career profile (Task 5)."""
+        if self.use_mock:
+            return {"approved": False, "reason": "not implemented yet"}
+        return {"approved": False, "reason": "not implemented yet"}
