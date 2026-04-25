@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +57,13 @@ export default function DashboardPage() {
   const statsQuery = useDashboardStats();
   const { runId, isRunning, error: pipelineError, startPipeline, handleComplete, handleError } = usePipelineRun();
 
+  const handlePipelineComplete = useCallback(() => {
+    handleComplete();
+    signalsQuery.refetch();
+    oppsQuery.refetch();
+    actionsQuery.refetch();
+  }, [handleComplete, signalsQuery, oppsQuery, actionsQuery]);
+
   const recentSignals = signalsQuery.data?.data ?? [];
   const topOpps = oppsQuery.data?.data ?? [];
   const priorityActions = actionsQuery.data?.data ?? [];
@@ -79,7 +87,7 @@ export default function DashboardPage() {
       {runId && (
         <PipelineProgressBar
           runId={runId}
-          onComplete={() => { handleComplete(); signalsQuery.refetch(); oppsQuery.refetch(); actionsQuery.refetch(); }}
+          onComplete={handlePipelineComplete}
           onError={handleError}
         />
       )}

@@ -68,7 +68,13 @@ async def get_run_status(
     user_id = current_user["id"]
     res = db.table("agent_runs").select("*").eq("id", run_id).eq("user_id", user_id).maybe_single().execute()
     if not res.data:
-        raise HTTPException(status_code=404, detail="Run not found")
+        # Run not in DB yet (worker still starting) — return in-progress status
+        return RunStatus(
+            run_id=run_id,
+            status="RUNNING",
+            stage="INGEST",
+            progress=5,
+        )
     row = res.data
     is_done = row["status"] in ("SUCCESS", "FAILED")
     return RunStatus(
@@ -88,14 +94,22 @@ async def trigger_pipeline_run(
     """Trigger a full pipeline run: ingest -> classify -> predict -> fit-score -> actions."""
     import uuid  # noqa: PLC0415
     settings = get_settings()
-    run_id = str(uuid.uuid4())
 
     if settings.USE_MOCK_DATA:
-        return PipelineRunResponse(run_id=run_id, status="queued", message="Mock pipeline run started")
+        return PipelineRunResponse(
+            run_id=str(uuid.uuid4()),
+            status="queued",
+            message="Mock pipeline run started (USE_MOCK_DATA=true)",
+        )
 
     from app.workers.ingest_signals import ingest_all_sources  # noqa: PLC0415
-    ingest_all_sources.delay(user_id=current_user["id"])
-    return PipelineRunResponse(run_id=run_id, status="queued", message="Pipeline run queued")
+    task = ingest_all_sources.delay(user_id=current_user["id"])
+    run_id = str(task.id)
+    return PipelineRunResponse(
+        run_id=run_id,
+        status="queued",
+        message="Pipeline run queued — poll /agents/run-status/{run_id} for progress",
+    )
 
 
 @router.get("/runs", response_model=list[AgentRunRead])
