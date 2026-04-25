@@ -1,7 +1,7 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-24 | Current Phase: **Phase 14 — Post-MVP Enhancements** | NOT STARTED 🔲
+> Last updated: 2026-04-25 | Current Phase: **Phase 15 — Resume & Document Intelligence** | NOT STARTED 🔲
 > Multi-user self-host distribution (Phases 20–24) planned — see `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
@@ -1100,9 +1100,22 @@ curl http://localhost:8000/api/v1/signals
 
 **Goal:** Upgrade signal processing throughput, add real job market grounding to opportunities, build FE pipeline visibility, and make the codebase shareable/launchable.
 
-**Status:** 🔲 NOT STARTED — begins after Phase 13 complete and MVP is locked
+**Status:** ✅ COMPLETE — 2026-04-25
 
 **Prerequisite:** Phase 13 complete. Full pipeline has run end-to-end with quality prompts. MVP declared stable.
+
+**Completed sprints:**
+- Sprint 14.1 ✅ — Signal pre-filter (`SignalPreFilter`) + batch Sonnet classifier (`BatchSignalClassifierAgent`, 10 signals/call). `batch_classify_signals_upgrade` Celery task. `PRE_FILTER_ENABLED` + `BATCH_CLASSIFY_SIZE` config flags.
+- Sprint 14.2 ✅ — Adzuna job board validation (`AdzunaClient` + `OpportunityValidatorService`). `real_postings JSONB` column on opportunities. FE "Real Posting Found" badge on `OpportunityCard`.
+- Sprint 14.3 ✅ — FE Pipeline Progress Bar (`PipelineProgressBar` component, `usePipelineRun` hook). RunStatus schema enriched (stage/progress/ETA). Redis `report_stage()` helper. "Run Pipeline" button on Dashboard. `/pipeline/run` endpoint uses Celery task ID as `run_id`.
+- Sprint 14.4 ✅ — Extended thinking enabled on `OpportunityPredictorAgent` (`thinking_budget=8000`). `base_agent._call_claude()` supports `thinking_budget` param; extracts text from content blocks.
+- Sprint 14.5 ✅ — Launch package: `start.sh`, `.devcontainer/devcontainer.json`, `backend/app/db/seeds/seed_demo.py` (5 companies, 5 signals, 3 opps), `schema/initial.sql` (concatenated migrations), `QUICKSTART.md`.
+
+**Key decisions / deviations:**
+- asyncpg JSONB: pass Python `list` directly (not `json.dumps`) to prevent `InvalidTextRepresentationError`
+- Celery task ID used as `run_id` returned to FE — progress Redis key linked to actual task
+- `BATCH_CLASSIFY_SIZE` bounded with `Field(ge=1, le=10)` to prevent context overflow
+- `positioning_notes` → `approach_angle` DB column rename deferred to Phase 15 (noted in technical debt)
 
 ---
 

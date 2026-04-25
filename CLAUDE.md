@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-24 | Phase 13: COMPLETE ✅ | Phase 14: NOT STARTED | Next: Phase 14 — Post-MVP Enhancements
+> Last updated: 2026-04-25 | Phase 14: COMPLETE ✅ | Phase 15: NOT STARTED | Next: Phase 15 — Resume & Document Intelligence
 > Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
