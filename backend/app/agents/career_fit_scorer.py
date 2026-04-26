@@ -46,6 +46,10 @@ class UserProfileForScoring(BaseModel):
     aspirations_text: str = ""
     skills: list[str] = Field(default_factory=list)
     embedding_summary: str = ""
+    # Phase 15 enrichments — optional, populated from career_profiles when available
+    seniority_band: str | None = None
+    work_history: list[dict] = Field(default_factory=list)
+    key_achievements: list[dict] = Field(default_factory=list)
 
 
 class CareerFitScorerInput(BaseModel):
@@ -179,11 +183,23 @@ class CareerFitScorerAgent(BaseAgent):
     def _build_user_message(self, input_data: CareerFitScorerInput) -> str:
         opp_json = json.dumps(input_data.opportunity.model_dump(mode="json"), indent=2)
         profile_json = json.dumps(input_data.user_profile.model_dump(mode="json"), indent=2)
-        return (
-            f"opportunity:\n{opp_json}\n\n"
-            f"user_profile:\n{profile_json}\n\n"
-            "Score the career fit and return JSON as instructed."
-        )
+        parts = [
+            f"opportunity:\n{opp_json}",
+            f"user_profile:\n{profile_json}",
+        ]
+        # Phase 15 enrichments — include when available
+        if input_data.user_profile.seniority_band:
+            parts.append(f"seniority_band: {input_data.user_profile.seniority_band}")
+        if input_data.user_profile.work_history:
+            parts.append(
+                f"work_history: {json.dumps(input_data.user_profile.work_history[:3])}"
+            )
+        if input_data.user_profile.key_achievements:
+            parts.append(
+                f"key_achievements: {json.dumps(input_data.user_profile.key_achievements[:3])}"
+            )
+        parts.append("Score the career fit and return JSON as instructed.")
+        return "\n\n".join(parts)
 
     def _parse_response(self, raw_text: str) -> CareerFitScorerOutput:
         text = raw_text.strip()

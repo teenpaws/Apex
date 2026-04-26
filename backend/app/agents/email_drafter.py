@@ -52,6 +52,9 @@ class UserProfileForEmail(BaseModel):
     current_role: str
     aspirations_text: str = ""
     key_skills: list[str] = Field(default_factory=list)
+    # Phase 15 enrichments — optional, populated from career_profiles when available
+    key_achievements: list[dict] = Field(default_factory=list)
+    cover_letter_narratives: list[dict] = Field(default_factory=list)
 
 
 class PositioningContext(BaseModel):
@@ -182,14 +185,44 @@ class EmailDrafterAgent(BaseAgent):
             )
         return prompt_path.read_text(encoding="utf-8")
 
+    def _select_cover_letter_narrative(
+        self,
+        narratives: list[dict],
+        opportunity: OpportunityForEmail,
+    ) -> dict | None:
+        """Return the best-matching cover letter narrative for the opportunity context.
+
+        Matching logic: find the narrative whose ``target_context`` appears as a
+        substring (case-insensitive) in the opportunity's ``why_fit`` text.  Falls
+        back to the first narrative when no match is found.
+        """
+        if not narratives:
+            return None
+        why_fit_lower = (opportunity.why_fit or "").lower()
+        for narrative in narratives:
+            target_ctx = (narrative.get("target_context") or "").lower()
+            if target_ctx and target_ctx in why_fit_lower:
+                return narrative
+        return narratives[0]
+
     def _build_user_message(self, input_data: EmailDrafterInput) -> str:
-        return json.dumps({
+        payload: dict = {
             "action": input_data.action.model_dump(mode="json"),
             "contact": input_data.contact.model_dump(mode="json"),
             "opportunity": input_data.opportunity.model_dump(mode="json"),
             "user_profile": input_data.user_profile.model_dump(mode="json"),
             "positioning": input_data.positioning.model_dump(mode="json"),
-        }, indent=2)
+        }
+        # Phase 15 enrichments — append when available
+        best_narrative = self._select_cover_letter_narrative(
+            input_data.user_profile.cover_letter_narratives,
+            input_data.opportunity,
+        )
+        if best_narrative:
+            payload["cover_letter_narrative"] = best_narrative
+        if input_data.user_profile.key_achievements:
+            payload["key_achievements"] = input_data.user_profile.key_achievements[:2]
+        return json.dumps(payload, indent=2)
 
     def _parse_response(self, raw_text: str) -> EmailDrafterOutput:
         text = raw_text.strip()
