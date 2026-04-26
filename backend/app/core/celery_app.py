@@ -24,6 +24,7 @@ celery_app = Celery(
     include=[
         "app.workers.ingest_signals",
         "app.workers.classify_signals",
+        "app.workers.extract_profile",
     ],
 )
 

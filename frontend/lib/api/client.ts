@@ -11,4 +11,6 @@ export {
   contactsApi,
   agentsApi,
   analyticsApi,
+  documentsApi,
 } from '../api';
+export type { DocumentRecord, UploadedDoc, PendingReview } from '../api';

@@ -217,7 +217,7 @@ class TestOpportunityPredictorOutputSchema:
                 confidence="HIGH",
                 timeline_weeks=6,
                 why_fit="Good fit",
-                positioning_notes="Lead with MBA",
+                approach_angle="Lead with MBA",
                 ideal_contact_title="Chief of Staff",
             )
 
@@ -231,7 +231,7 @@ class TestOpportunityPredictorOutputSchema:
                 confidence="VERY_HIGH",  # invalid
                 timeline_weeks=6,
                 why_fit="Good fit",
-                positioning_notes="Lead with MBA",
+                approach_angle="Lead with MBA",
                 ideal_contact_title="Chief of Staff",
             )
 
@@ -245,7 +245,7 @@ class TestOpportunityPredictorOutputSchema:
                 confidence="HIGH",
                 timeline_weeks=0,  # invalid: ge=1
                 why_fit="Good fit",
-                positioning_notes="Lead with MBA",
+                approach_angle="Lead with MBA",
                 ideal_contact_title="Chief of Staff",
             )
 
@@ -257,7 +257,7 @@ class TestOpportunityPredictorOutputSchema:
             confidence="HIGH",
             timeline_weeks=6,
             why_fit="Your MBA background aligns perfectly.",
-            positioning_notes="Lead with HEC Paris network.",
+            approach_angle="Lead with HEC Paris network.",
             ideal_contact_title="Chief of Staff",
         )
         data = obj.model_dump(mode="json")

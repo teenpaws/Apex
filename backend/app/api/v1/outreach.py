@@ -76,7 +76,7 @@ async def create_draft(
             action_id=body.action_id,
             action={"title": "Outreach", "type": "OUTREACH", "description": ""},
             contact={"name": "Contact", "title": "Executive", "company_name": "Company"},
-            opportunity={"predicted_role": "Strategy Role", "why_fit": "Strong fit", "positioning_notes": ""},
+            opportunity={"predicted_role": "Strategy Role", "why_fit": "Strong fit", "approach_angle": ""},
             user_profile={"full_name": "User", "current_role": "Professional", "aspirations_text": "", "key_skills": []},
         )
         output = await agent.draft(agent_input.model_dump(mode="json"))

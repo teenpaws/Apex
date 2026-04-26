@@ -51,6 +51,10 @@ class UserProfileSummary(BaseModel):
     industries: list[str] = Field(default_factory=list)
     aspirations_text: str = ""
     skills: list[str] = Field(default_factory=list)
+    # Phase 15 enrichments — optional, populated from resume extraction
+    seniority_band: str | None = None
+    years_of_experience: int | None = None
+    work_history_summary: list[str] = Field(default_factory=list)
 
 
 class OpportunityPredictorInput(BaseModel):
@@ -79,7 +83,7 @@ class OpportunityPredictorOutput(BaseModel):
     why_fit: str = Field(
         description="2-3 sentences explaining why the user's background fits"
     )
-    positioning_notes: str = Field(
+    approach_angle: str = Field(
         description="1-2 sentences on what angle the user should lead with"
     )
     ideal_contact_title: str = Field(
@@ -199,13 +203,30 @@ class OpportunityPredictorAgent(BaseAgent):
             [s.model_dump(mode="json") for s in input_data.company_signals],
             indent=2,
         )
-        profile_json = json.dumps(input_data.user_profile.model_dump(mode="json"), indent=2)
-        return (
-            f"Company: {input_data.company_name}\n\n"
-            f"company_signals:\n{signals_json}\n\n"
-            f"user_profile:\n{profile_json}\n\n"
-            "Predict the hiring opportunity and return JSON as instructed."
-        )
+        profile = input_data.user_profile
+        profile_dict = profile.model_dump(mode="json")
+        profile_json = json.dumps(profile_dict, indent=2)
+
+        lines = [
+            f"Company: {input_data.company_name}",
+            "",
+            f"company_signals:\n{signals_json}",
+            "",
+            f"user_profile:\n{profile_json}",
+        ]
+
+        # Phase 15: surface enriched fields as explicit context if present
+        if profile.seniority_band:
+            lines.append(f"\nuser_seniority_band: {profile.seniority_band}")
+        if profile.years_of_experience is not None:
+            lines.append(f"user_years_of_experience: {profile.years_of_experience}")
+        if profile.work_history_summary:
+            lines.append(
+                f"user_work_history_summary: {', '.join(profile.work_history_summary)}"
+            )
+
+        lines.append("\nPredict the hiring opportunity and return JSON as instructed.")
+        return "\n".join(lines)
 
     def _parse_response(self, raw_text: str) -> OpportunityPredictorOutput:
         text = raw_text.strip()

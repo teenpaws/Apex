@@ -115,7 +115,7 @@ async def main():
                 await conn.execute(
                     'INSERT INTO opportunities '
                     '(id, user_id, company_id, predicted_role, confidence, '
-                    ' timeline_weeks, why_fit, positioning_notes, '
+                    ' timeline_weeks, why_fit, approach_angle, '
                     ' predicted_salary_range, fit_score, signal_ids, status) '
                     'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::uuid[],$12)',
                     uuid.UUID(oid),
@@ -125,7 +125,7 @@ async def main():
                     output.confidence,
                     output.timeline_weeks,
                     output.why_fit,
-                    output.positioning_notes,
+                    output.approach_angle,
                     '',
                     0.0,
                     sig_uuids,

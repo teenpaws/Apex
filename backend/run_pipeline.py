@@ -152,7 +152,7 @@ async def persist_opportunity(conn, user_id: str, company_id: str, output, signa
                 """
                 INSERT INTO opportunities
                     (id, user_id, company_id, predicted_role, confidence,
-                     timeline_weeks, why_fit, positioning_notes,
+                     timeline_weeks, why_fit, approach_angle,
                      predicted_salary_range, fit_score, signal_ids, status)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::uuid[],$12)
                 """,
@@ -163,7 +163,7 @@ async def persist_opportunity(conn, user_id: str, company_id: str, output, signa
                 output.confidence,
                 output.timeline_weeks,
                 output.why_fit,
-                output.positioning_notes,
+                output.approach_angle,
                 "",    # predicted_salary_range not in agent output
                 0.0,   # fit_score filled in later
                 sig_uuids,
@@ -366,7 +366,7 @@ async def generate_actions_for_opportunity(opp_id: str, company: dict, profile: 
 
     try:
         opp_row = await conn.fetchrow(
-            "SELECT predicted_role, confidence, why_fit, positioning_notes, timeline_weeks FROM opportunities WHERE id = $1",
+            "SELECT predicted_role, confidence, why_fit, approach_angle, timeline_weeks FROM opportunities WHERE id = $1",
             uuid.UUID(opp_id)
         )
         if not opp_row:

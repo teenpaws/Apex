@@ -80,7 +80,7 @@ try {
         </section>
 
         <section data-testid="positioning-section">
-          <p>{opportunity.positioning_notes}</p>
+          <p>{opportunity.approach_angle}</p>
         </section>
 
         <button
@@ -106,7 +106,7 @@ const baseOpp: Opportunity = {
   confidence: 'HIGH',
   timeline_weeks: 6,
   why_fit: 'Strong MBA background + AI sector experience.',
-  positioning_notes: 'Lead with your HEC network in Paris tech ecosystem.',
+  approach_angle: 'Lead with your HEC network in Paris tech ecosystem.',
   predicted_salary_range: '€120k–€160k + equity',
   fit_score: 87,
   key_contact_id: 'ct1',
@@ -244,7 +244,7 @@ describe('OpportunityDetail', () => {
     );
   });
 
-  it('shows positioning_notes', () => {
+  it('shows approach_angle', () => {
     render(
       <OpportunityDetail
         opportunity={baseOpp}

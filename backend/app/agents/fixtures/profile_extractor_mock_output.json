@@ -1,0 +1,64 @@
+{
+  "years_of_experience": 6,
+  "seniority_band": "ASSOCIATE",
+  "education": [
+    {
+      "degree": "MBA",
+      "institution": "HEC Paris",
+      "year": 2026,
+      "field": "General Management"
+    },
+    {
+      "degree": "B.Sc. Economics",
+      "institution": "University of Delhi",
+      "year": 2018,
+      "field": "Economics"
+    }
+  ],
+  "work_history": [
+    {
+      "company": "Boston Consulting Group",
+      "title": "Senior Consultant",
+      "start_year": 2021,
+      "end_year": 2024,
+      "summary": "Led strategy and digital transformation engagements for Fortune 500 clients in financial services and technology sectors."
+    },
+    {
+      "company": "Deloitte",
+      "title": "Consultant",
+      "start_year": 2018,
+      "end_year": 2021,
+      "summary": "Delivered operational improvement programs across manufacturing and consumer goods clients in South Asia."
+    }
+  ],
+  "key_achievements": [
+    {
+      "achievement": "Delivered $12M cost reduction roadmap for global bank",
+      "impact": "$12M in identified savings implemented within 9 months",
+      "context": "BCG engagement, Financial Services practice"
+    },
+    {
+      "achievement": "Led AI strategy for major European telecom",
+      "impact": "Roadmap adopted by board; €40M AI investment approved",
+      "context": "BCG engagement, Technology Media & Telecom practice"
+    },
+    {
+      "achievement": "Optimised supply chain for FMCG manufacturer",
+      "impact": "15% inventory reduction, €2M annual savings",
+      "context": "Deloitte, Operations practice"
+    }
+  ],
+  "inferred_skills": [
+    "financial modelling",
+    "stakeholder management",
+    "strategy frameworks",
+    "data analysis",
+    "project management"
+  ],
+  "cover_letter_narratives": [
+    {
+      "target_context": "PE firms",
+      "core_narrative": "Frames value creation expertise from top-tier consulting, with emphasis on deal diligence support and portfolio operational improvement. Positions HEC MBA as accelerator for PE transition with immediate contribution to deal teams."
+    }
+  ]
+}

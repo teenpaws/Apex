@@ -257,7 +257,7 @@ OPPORTUNITIES = [
         "confidence": "HIGH",
         "timeline_weeks": 6,
         "why_fit": "Post-funding growth + enterprise push perfectly aligns with MBA strategy + tech background.",
-        "positioning_notes": "Lead with enterprise GTM experience; highlight cross-functional leadership at scale.",
+        "approach_angle": "Lead with enterprise GTM experience; highlight cross-functional leadership at scale.",
         "predicted_salary_range": "€120,000 – €160,000 + equity",
         "fit_score": 87.5,
         "signal_ids": f"{{{SIGNAL_IDS[0]},{SIGNAL_IDS[1]},{SIGNAL_IDS[9]}}}",
@@ -271,7 +271,7 @@ OPPORTUNITIES = [
         "confidence": "MEDIUM",
         "timeline_weeks": 10,
         "why_fit": "Paris AI CoE expansion creates demand for bilingual MBA candidates with AI fluency.",
-        "positioning_notes": "Emphasize Paris network + AI coursework; mention HEC connection to QuantumBlack alumni.",
+        "approach_angle": "Emphasize Paris network + AI coursework; mention HEC connection to QuantumBlack alumni.",
         "predicted_salary_range": "€95,000 – €130,000 + bonus",
         "fit_score": 72.0,
         "signal_ids": f"{{{SIGNAL_IDS[2]},{SIGNAL_IDS[3]}}}",
@@ -285,7 +285,7 @@ OPPORTUNITIES = [
         "confidence": "SPECULATIVE",
         "timeline_weeks": 14,
         "why_fit": "Series F GTM acceleration may create partnership roles but timeline is uncertain.",
-        "positioning_notes": "Warm intro path via HEC alumni at Dataiku — check LinkedIn before cold outreach.",
+        "approach_angle": "Warm intro path via HEC alumni at Dataiku — check LinkedIn before cold outreach.",
         "predicted_salary_range": "€85,000 – €110,000",
         "fit_score": 58.0,
         "signal_ids": f"{{{SIGNAL_IDS[4]},{SIGNAL_IDS[5]}}}",
@@ -410,14 +410,14 @@ def build_seed_statements() -> list[tuple[str, list]]:
         stmts.append((
             """
             INSERT INTO opportunities (id, user_id, company_id, predicted_role, confidence,
-                                       timeline_weeks, why_fit, positioning_notes,
+                                       timeline_weeks, why_fit, approach_angle,
                                        predicted_salary_range, fit_score, signal_ids, status)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid[], $12)
             ON CONFLICT (id) DO NOTHING
             """,
             [
                 o["id"], o["user_id"], o["company_id"], o["predicted_role"], o["confidence"],
-                o["timeline_weeks"], o["why_fit"], o["positioning_notes"],
+                o["timeline_weeks"], o["why_fit"], o["approach_angle"],
                 o["predicted_salary_range"], o["fit_score"], o["signal_ids"], o["status"],
             ],
         ))

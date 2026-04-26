@@ -168,7 +168,7 @@ export function OpportunityDetail({
           )}
 
           {/* Positioning Notes */}
-          {opp.positioning_notes && (
+          {opp.approach_angle && (
             <section className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Zap className="h-3.5 w-3.5 text-violet-400" />
@@ -177,7 +177,7 @@ export function OpportunityDetail({
                 </h4>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                {opp.positioning_notes}
+                {opp.approach_angle}
               </p>
             </section>
           )}

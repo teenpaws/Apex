@@ -82,6 +82,10 @@ def _load_mock_company_context(user_id: str, company_id: str) -> dict[str, Any]:
                 "lead AI transformation projects for global enterprises."
             ),
             "skills": ["Strategy", "AI/ML", "Change Management", "Executive Stakeholder Management"],
+            # Phase 15 enrichments
+            "seniority_band": None,
+            "years_of_experience": None,
+            "work_history_summary": [],
         },
     }
 
@@ -97,7 +101,7 @@ def _load_mock_opportunity(opportunity_id: str, user_id: str) -> dict[str, Any]:
             "Your MBA background and AI strategy experience align directly with "
             "McKinsey's new digital transformation push."
         ),
-        "positioning_notes": "Lead with your HEC Paris network and AI consulting background.",
+        "approach_angle": "Lead with your HEC Paris network and AI consulting background.",
         "ideal_contact_title": "Chief of Staff or Partner",
         "company_name": "McKinsey & Company",
     }
@@ -155,13 +159,27 @@ async def _live_load_company_context(user_id: str, company_id: str) -> dict[str,
         )
         profile_row = await conn.fetchrow(
             """
-            SELECT current_role, target_roles, industries, aspirations_text
+            SELECT current_role, target_roles, industries, aspirations_text,
+                   seniority_band, years_of_experience, work_history_json
             FROM career_profiles WHERE user_id = $1
             """,
             _uuid.UUID(user_id),
         )
     finally:
         await conn.close()
+
+    # Phase 15: extract work_history_summary from work_history_json
+    work_history_summary: list[str] = []
+    if profile_row and profile_row["work_history_json"]:
+        import json as _json  # noqa: PLC0415
+        wh = profile_row["work_history_json"]
+        if isinstance(wh, str):
+            wh = _json.loads(wh)
+        work_history_summary = [
+            f"{entry.get('title', '')} at {entry.get('company', '')}"
+            for entry in (wh or [])
+            if entry.get("company")
+        ][:5]
 
     return {
         "company_name": company_row["name"] if company_row else "Unknown",
@@ -182,6 +200,10 @@ async def _live_load_company_context(user_id: str, company_id: str) -> dict[str,
             "industries": list(profile_row["industries"] or []) if profile_row else [],
             "aspirations_text": profile_row["aspirations_text"] or "" if profile_row else "",
             "skills": [],
+            # Phase 15 enrichments
+            "seniority_band": profile_row["seniority_band"] if profile_row else None,
+            "years_of_experience": profile_row["years_of_experience"] if profile_row else None,
+            "work_history_summary": work_history_summary,
         },
     }
 
@@ -203,7 +225,7 @@ async def _live_store_opportunity(
             """
             INSERT INTO opportunities (
                 id, user_id, company_id, predicted_role, confidence,
-                timeline_weeks, why_fit, positioning_notes,
+                timeline_weeks, why_fit, approach_angle,
                 status, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PREDICTED', NOW(), NOW())
             """,
@@ -214,7 +236,7 @@ async def _live_store_opportunity(
             output.confidence,
             output.timeline_weeks,
             output.why_fit,
-            output.positioning_notes,
+            output.approach_angle,
         )
     finally:
         await conn.close()
@@ -234,7 +256,7 @@ async def _live_load_opportunity_for_scoring(
     try:
         opp_row = await conn.fetchrow(
             """
-            SELECT predicted_role, confidence, why_fit, positioning_notes
+            SELECT predicted_role, confidence, why_fit, approach_angle
             FROM opportunities WHERE id = $1 AND user_id = $2
             """,
             _uuid.UUID(opportunity_id),
@@ -255,7 +277,7 @@ async def _live_load_opportunity_for_scoring(
             "predicted_role": opp_row["predicted_role"] or "" if opp_row else "",
             "confidence": opp_row["confidence"] if opp_row else "SPECULATIVE",
             "why_fit": opp_row["why_fit"] or "" if opp_row else "",
-            "positioning_notes": opp_row["positioning_notes"] or "" if opp_row else "",
+            "approach_angle": opp_row["approach_angle"] or "" if opp_row else "",
         },
         "profile_data": {
             "current_role": profile_row["current_role"] or "" if profile_row else "",
@@ -344,6 +366,19 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
             user_profile=UserProfileSummary(**ctx["user_profile"]),
         )
         output = await agent.predict(predictor_input)
+
+        # Phase 15: apply seniority gate — downgrade confidence if role is 2+ bands above user
+        from app.services.seniority_gate import SeniorityGate  # noqa: PLC0415
+        gate_result = SeniorityGate.apply(
+            user_band=ctx["user_profile"].get("seniority_band"),
+            predicted_role=output.predicted_role,
+            original_confidence=output.confidence,
+        )
+        if gate_result["was_downgraded"]:
+            logger.info("seniority_gate: %s", gate_result["reason"])
+            output = output.model_copy(
+                update={"confidence": gate_result["gated_confidence"]}
+            )
 
         # 3. Store opportunity
         if settings.USE_MOCK_DATA:
@@ -475,7 +510,7 @@ def score_opportunity_fit(self, user_id: str, opportunity_id: str) -> dict[str, 
                 predicted_role=opp_data["predicted_role"],
                 confidence=opp_data["confidence"],
                 why_fit=opp_data["why_fit"],
-                positioning_notes=opp_data.get("positioning_notes", ""),
+                approach_angle=opp_data.get("approach_angle", ""),
             ),
             user_profile=UserProfileForScoring(**profile_data),
         )

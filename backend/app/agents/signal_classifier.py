@@ -45,6 +45,9 @@ class SignalClassifierInput(BaseModel):
     company_name: str
     user_target_industries: list[str] = Field(default_factory=list)
     user_target_roles: list[str] = Field(default_factory=list)
+    # Phase 15 enrichments — optional, populated from career_profiles when available
+    user_seniority_band: str | None = None
+    user_work_history_companies: list[str] = Field(default_factory=list)
 
 
 class SignalClassifierOutput(BaseModel):
@@ -185,17 +188,24 @@ class SignalClassifierAgent(BaseAgent):
 
     def _build_user_message(self, input_data: SignalClassifierInput) -> str:
         """Format the user turn message from input data."""
-        return (
-            f"Signal ID: {input_data.signal_id}\n"
-            f"Company: {input_data.company_name}\n"
-            f"Source: {input_data.source}\n"
-            f"Date: {input_data.signal_date.isoformat()}\n"
-            f"Title: {input_data.title}\n"
-            f"Description: {input_data.description}\n\n"
-            f"User's target industries: {', '.join(input_data.user_target_industries) or 'Not specified'}\n"
-            f"User's target roles: {', '.join(input_data.user_target_roles) or 'Not specified'}\n\n"
-            "Classify this signal and return JSON as instructed."
-        )
+        lines = [
+            f"Signal ID: {input_data.signal_id}",
+            f"Company: {input_data.company_name}",
+            f"Source: {input_data.source}",
+            f"Date: {input_data.signal_date.isoformat()}",
+            f"Title: {input_data.title}",
+            f"Description: {input_data.description}",
+            "",
+            f"User's target industries: {', '.join(input_data.user_target_industries) or 'Not specified'}",
+            f"User's target roles: {', '.join(input_data.user_target_roles) or 'Not specified'}",
+        ]
+        if input_data.user_seniority_band:
+            lines.append(f"user_seniority_band: {input_data.user_seniority_band}")
+        if input_data.user_work_history_companies:
+            lines.append(f"user_work_history_companies: {', '.join(input_data.user_work_history_companies)}")
+        lines.append("")
+        lines.append("Classify this signal and return JSON as instructed.")
+        return "\n".join(lines)
 
     def _parse_response(self, raw_text: str) -> SignalClassifierOutput:
         """

@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
     confidence              text NOT NULL,          -- HIGH|MEDIUM|SPECULATIVE
     timeline_weeks          int,
     why_fit                 text,
-    positioning_notes       text,
+    approach_angle          text,
     predicted_salary_range  text,
     fit_score               float,
     key_contact_id          uuid REFERENCES contacts(id) ON DELETE SET NULL,
@@ -440,3 +440,69 @@ ALTER TABLE opportunities
 CREATE INDEX IF NOT EXISTS idx_opportunities_real_postings_notnull
   ON opportunities ((real_postings IS NOT NULL))
   WHERE real_postings IS NOT NULL;
+
+-- ============================================================
+-- Migration 015: user_documents table (Phase 15)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_documents (
+    id                  uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename            text NOT NULL,
+    file_type           text NOT NULL CHECK (file_type IN ('PDF', 'DOCX')),
+    doc_type            text NOT NULL CHECK (doc_type IN ('RESUME', 'COVER_LETTER', 'OTHER')),
+    storage_path        text,
+    extracted_text      text,
+    target_context      text,
+    extraction_status   text NOT NULL DEFAULT 'PENDING'
+                        CHECK (extraction_status IN ('PENDING', 'EXTRACTED', 'ANALYZED', 'FAILED')),
+    staging_json        jsonb,
+    created_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_documents_user_id ON user_documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_documents_doc_type ON user_documents(user_id, doc_type);
+
+-- Enable Row Level Security — users can only access their own documents.
+ALTER TABLE user_documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS user_documents_select_own
+  ON user_documents FOR SELECT
+  USING (user_id = auth.uid()::uuid);
+
+CREATE POLICY IF NOT EXISTS user_documents_insert_own
+  ON user_documents FOR INSERT
+  WITH CHECK (user_id = auth.uid()::uuid);
+
+CREATE POLICY IF NOT EXISTS user_documents_delete_own
+  ON user_documents FOR DELETE
+  USING (user_id = auth.uid()::uuid);
+
+-- ============================================================
+-- Migration 016: extend career_profiles (Phase 15)
+-- ============================================================
+ALTER TABLE career_profiles
+  ADD COLUMN IF NOT EXISTS years_of_experience  int,
+  ADD COLUMN IF NOT EXISTS seniority_band       text
+      CHECK (seniority_band IN ('ANALYST', 'ASSOCIATE', 'MANAGER', 'DIRECTOR', 'VP_PLUS')),
+  ADD COLUMN IF NOT EXISTS education_json       jsonb,
+  ADD COLUMN IF NOT EXISTS work_history_json    jsonb,
+  ADD COLUMN IF NOT EXISTS key_achievements_json jsonb,
+  ADD COLUMN IF NOT EXISTS raw_resume_text      text,
+  ADD COLUMN IF NOT EXISTS profile_source       text NOT NULL DEFAULT 'MANUAL'
+      CHECK (profile_source IN ('MANUAL', 'RESUME', 'BOTH')),
+  ADD COLUMN IF NOT EXISTS last_analyzed_at     timestamptz,
+  ADD COLUMN IF NOT EXISTS extraction_staging_json jsonb;
+
+-- ============================================================
+-- Migration 017: rename positioning_notes to approach_angle (Phase 15)
+-- ============================================================
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'opportunities' AND column_name = 'positioning_notes'
+  ) THEN
+    ALTER TABLE opportunities RENAME COLUMN positioning_notes TO approach_angle;
+    COMMENT ON COLUMN opportunities.approach_angle IS
+      '1-sentence strategic seed from OpportunityPredictor for the PositioningAdvisor to elaborate on.';
+  END IF;
+END $$;

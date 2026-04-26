@@ -35,6 +35,9 @@ class UserProfileForPositioning(BaseModel):
     aspirations_text: str = ""
     skills: list[str] = Field(default_factory=list)
     career_history_summary: str = ""
+    # Phase 15 enrichments — optional, populated from career_profiles when available
+    cover_letter_narratives: list[dict] = Field(default_factory=list)
+    key_achievements: list[dict] = Field(default_factory=list)
 
 
 class OpportunityForPositioning(BaseModel):
@@ -181,6 +184,26 @@ class PositioningAdvisorAgent(BaseAgent):
             )
         return prompt_path.read_text(encoding="utf-8")
 
+    def _select_cover_letter_narrative(
+        self,
+        narratives: list[dict],
+        opportunity: "OpportunityForPositioning",
+    ) -> dict | None:
+        """Return the best-matching cover letter narrative for the opportunity context.
+
+        Matching logic: find the narrative whose ``target_context`` appears as a
+        substring (case-insensitive) in the opportunity's ``why_fit`` text.  Falls
+        back to the first narrative when no match is found.
+        """
+        if not narratives:
+            return None
+        why_fit_lower = (opportunity.why_fit or "").lower()
+        for narrative in narratives:
+            target_ctx = (narrative.get("target_context") or "").lower()
+            if target_ctx and target_ctx in why_fit_lower:
+                return narrative
+        return narratives[0]
+
     def _build_user_message(self, input_data: PositioningAdvisorInput) -> str:
         profile_json = json.dumps(input_data.user_profile.model_dump(mode="json"), indent=2)
         opp_json = json.dumps(input_data.opportunity.model_dump(mode="json"), indent=2)
@@ -188,12 +211,26 @@ class PositioningAdvisorAgent(BaseAgent):
             [s.model_dump(mode="json") for s in input_data.company_signals],
             indent=2,
         )
-        return (
-            f"user_profile:\n{profile_json}\n\n"
-            f"opportunity:\n{opp_json}\n\n"
-            f"company_signals:\n{signals_json}\n\n"
-            "Generate the positioning narrative and return JSON as instructed."
+        parts = [
+            f"user_profile:\n{profile_json}",
+            f"opportunity:\n{opp_json}",
+            f"company_signals:\n{signals_json}",
+        ]
+        # Phase 15 enrichments — include when available
+        best_narrative = self._select_cover_letter_narrative(
+            input_data.user_profile.cover_letter_narratives,
+            input_data.opportunity,
         )
+        if best_narrative:
+            parts.append(
+                f"cover_letter_narrative: {json.dumps(best_narrative)}"
+            )
+        if input_data.user_profile.key_achievements:
+            parts.append(
+                f"key_achievements: {json.dumps(input_data.user_profile.key_achievements[:3])}"
+            )
+        parts.append("Generate the positioning narrative and return JSON as instructed.")
+        return "\n\n".join(parts)
 
     def _parse_response(self, raw_text: str) -> PositioningAdvisorOutput:
         text = raw_text.strip()

@@ -43,7 +43,7 @@ def _valid_input() -> dict:
         "opportunity": {
             "predicted_role": "Head of EMEA Strategy",
             "why_fit": "MBA in Finance + M&A integration background aligns with Stripe's EMEA expansion.",
-            "positioning_notes": "Lead with EMEA payments market knowledge.",
+            "approach_angle": "Lead with EMEA payments market knowledge.",
         },
         "user_profile": {
             "full_name": "Alex Dubois",

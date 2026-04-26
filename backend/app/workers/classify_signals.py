@@ -68,7 +68,7 @@ async def _load_signal_from_db(signal_id: str) -> dict[str, Any]:
 
         profile = await conn.fetchrow(
             """
-            SELECT target_roles, industries
+            SELECT target_roles, industries, seniority_band, work_history_json
             FROM career_profiles
             WHERE user_id = $1
             ORDER BY updated_at DESC NULLS LAST
@@ -78,6 +78,9 @@ async def _load_signal_from_db(signal_id: str) -> dict[str, Any]:
         )
         target_roles: list[str] = list(profile["target_roles"]) if profile else []
         industries: list[str] = list(profile["industries"]) if profile else []
+
+        # Phase 15: enrich with seniority_band and work_history company names
+        enrichment = await _fetch_profile_enrichment(str(row["user_id"]), conn)
 
         return {
             "id": str(row["id"]),
@@ -93,6 +96,8 @@ async def _load_signal_from_db(signal_id: str) -> dict[str, Any]:
             "company_name": row["company_name"] or "",
             "user_target_industries": industries,
             "user_target_roles": target_roles,
+            "user_seniority_band": enrichment["seniority_band"],
+            "user_work_history_companies": enrichment["work_history_industries"],
         }
     finally:
         await conn.close()
@@ -138,6 +143,35 @@ def _get_settings():
     return get_settings()
 
 
+async def _fetch_profile_enrichment(user_id: str, conn) -> dict:
+    """Return seniority_band and work_history company names from career_profiles."""
+    import json as _json
+    row = await conn.fetchrow(
+        "SELECT seniority_band, work_history_json FROM career_profiles WHERE user_id = $1",
+        user_id,
+    )
+    if not row:
+        return {"seniority_band": None, "work_history_industries": []}
+
+    industries: list[str] = []
+    if row["work_history_json"]:
+        wh = (
+            _json.loads(row["work_history_json"])
+            if isinstance(row["work_history_json"], str)
+            else row["work_history_json"]
+        )
+        industries = [
+            entry.get("company", "")
+            for entry in (wh or [])
+            if entry.get("company")
+        ]
+
+    return {
+        "seniority_band": row["seniority_band"],
+        "work_history_industries": industries[:5],
+    }
+
+
 def _load_mock_signal(signal_id: str) -> dict[str, Any]:
     """
     Return a mock signal record for development (USE_MOCK_DATA=true).
@@ -157,6 +191,8 @@ def _load_mock_signal(signal_id: str) -> dict[str, Any]:
         "company_name": "Acme Corp",
         "user_target_industries": ["Fintech", "SaaS", "Consulting"],
         "user_target_roles": ["Strategy", "Operations", "Business Development"],
+        "user_seniority_band": None,
+        "user_work_history_companies": [],
     }
 
 
@@ -231,6 +267,9 @@ def classify_signal(self, signal_id: str) -> dict[str, Any]:
             company_name=signal_data["company_name"],
             user_target_industries=signal_data.get("user_target_industries", []),
             user_target_roles=signal_data.get("user_target_roles", []),
+            # Phase 15: pass enriched profile context (None-safe defaults)
+            user_seniority_band=signal_data.get("user_seniority_band"),
+            user_work_history_companies=signal_data.get("user_work_history_companies", []),
         )
 
         output = await agent.classify(classifier_input)

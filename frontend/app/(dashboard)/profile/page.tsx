@@ -15,8 +15,11 @@ import {
 import { SkeletonCard } from '@/components/shared/SkeletonCard';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { useProfile, useUpdateProfile } from '@/hooks/useProfile';
-import { profileApi } from '@/lib/api/client';
-import type { CareerProfile } from '@/types';
+import { profileApi, documentsApi } from '@/lib/api/client';
+import type { DocumentRecord } from '@/lib/api/client';
+import { DocumentUploadSection } from '@/components/profile/DocumentUploadSection';
+import { ExtractionReviewPanel } from '@/components/profile/ExtractionReviewPanel';
+import type { CareerProfile, StagedProfile } from '@/types';
 
 // ── Tag input component ───────────────────────────────────────────────────────
 
@@ -111,6 +114,11 @@ export default function ProfilePage() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [analyzeRunId, setAnalyzeRunId] = useState<string | null>(null);
 
+  // Document intelligence state (Phase 15)
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [hasPending, setHasPending] = useState(false);
+  const [staged, setStaged] = useState<StagedProfile | null>(null);
+
   // Sync form when profile loads
   useEffect(() => {
     if (profileQuery.data) {
@@ -121,6 +129,32 @@ export default function ProfilePage() {
       setAspirationsText(p.aspirations_text ?? '');
     }
   }, [profileQuery.data]);
+
+  // Load documents and check for pending extraction review on mount
+  useEffect(() => {
+    documentsApi.list().then(setDocuments).catch(() => {});
+    documentsApi
+      .getPendingReview()
+      .then((r) => {
+        setHasPending(r.has_pending);
+        if (r.staged) setStaged(r.staged);
+      })
+      .catch(() => {});
+  }, []);
+
+  const refreshDocuments = () => {
+    documentsApi.list().then(setDocuments).catch(() => {});
+  };
+
+  const handleAnalyzeComplete = () => {
+    documentsApi
+      .getPendingReview()
+      .then((r) => {
+        setHasPending(r.has_pending);
+        if (r.staged) setStaged(r.staged);
+      })
+      .catch(() => {});
+  };
 
   const completeness = calcCompleteness({
     current_role: currentRole,
@@ -234,6 +268,29 @@ export default function ProfilePage() {
           </p>
         )}
       </Card>
+
+      {/* Document upload (Phase 15) */}
+      <Card className="p-6 bg-card border-border">
+        <DocumentUploadSection
+          documents={documents}
+          onDocumentsChange={refreshDocuments}
+          onAnalyzeComplete={handleAnalyzeComplete}
+        />
+      </Card>
+
+      {/* Extraction review panel (Phase 15) */}
+      {hasPending && staged && (
+        <>
+          <ExtractionReviewPanel
+            staged={staged}
+            onApproved={() => {
+              setHasPending(false);
+              setStaged(null);
+            }}
+          />
+          <div className="border-t border-border my-6" />
+        </>
+      )}
 
       {/* Form */}
       <Card className="p-6 bg-card border-border space-y-5">

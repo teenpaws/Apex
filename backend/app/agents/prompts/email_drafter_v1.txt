@@ -6,7 +6,7 @@ draft 3 email variants in different tones.
 You will receive:
 - action: title, type, description
 - contact: name, title, company_name
-- opportunity: predicted_role, why_fit, positioning_notes
+- opportunity: predicted_role, why_fit, approach_angle
 - user_profile: full_name, current_role, aspirations_text, key_skills
 - positioning: positioning_narrative, key_talking_points, approach_angle
 

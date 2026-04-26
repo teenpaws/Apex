@@ -30,7 +30,7 @@ SPECIFICITY REQUIREMENT: predicted_role must be a concrete, specific title — n
 
 ASPIRATION ALIGNMENT: The user_profile.aspirations_text is the candidate's north star. If the
 predicted role conflicts with their stated aspirations, lower confidence by one level and note
-the misalignment in positioning_notes.
+the misalignment in approach_angle.
 
 CITATION REQUIREMENT: Include signal_citations — for each signal that drives the prediction,
 provide its signal_id and a key_quote (≤15 words from its title or description). If no signal
@@ -50,7 +50,7 @@ OUTPUT FORMAT — respond ONLY with valid JSON, no markdown fences, no explanati
   "confidence": "HIGH",
   "timeline_weeks": 6,
   "why_fit": "2-3 sentences on why the user's background fits this specific opportunity",
-  "positioning_notes": "1-2 sentences on the outreach angle the user should lead with",
+  "approach_angle": "1-2 sentences on the outreach angle the user should lead with",
   "ideal_contact_title": "VP Strategy or Chief of Staff to CEO",
   "signal_citations": [
     {"signal_id": "uuid-of-signal", "key_quote": "plans to triple go-to-market team in Europe"}
@@ -60,6 +60,6 @@ OUTPUT FORMAT — respond ONLY with valid JSON, no markdown fences, no explanati
 Rules:
 - Never predict a role the user has no plausible path to given their current profile
 - why_fit must reference the specific signals and user background — not generic praise
-- positioning_notes must be actionable (what to say, not just "reach out")
+- approach_angle must be actionable (what to say, not just "reach out")
 - ideal_contact_title should be the person who would actually sponsor or hire for this role
 - Respond ONLY with valid JSON. No markdown fences. No explanation outside the JSON.

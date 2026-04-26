@@ -35,7 +35,7 @@ class OpportunityORM(Base):
     confidence: Mapped[str] = mapped_column(Text, nullable=False)
     timeline_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
     why_fit: Mapped[str | None] = mapped_column(Text, nullable=True)
-    positioning_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approach_angle: Mapped[str | None] = mapped_column(Text, nullable=True)
     predicted_salary_range: Mapped[str | None] = mapped_column(Text, nullable=True)
     fit_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     key_contact_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -68,7 +68,7 @@ class OpportunityCreate(BaseModel):
     confidence: Confidence
     timeline_weeks: int | None = None
     why_fit: str | None = None
-    positioning_notes: str | None = None
+    approach_angle: str | None = None
     predicted_salary_range: str | None = None
     fit_score: float | None = None
     key_contact_id: uuid.UUID | None = None
@@ -88,7 +88,7 @@ class OpportunityRead(BaseModel):
     confidence: Confidence
     timeline_weeks: int | None
     why_fit: str | None
-    positioning_notes: str | None
+    approach_angle: str | None
     predicted_salary_range: str | None
     fit_score: float | None
     key_contact_id: uuid.UUID | None
@@ -107,7 +107,7 @@ class OpportunityUpdate(BaseModel):
     confidence: Confidence | None = None
     timeline_weeks: int | None = None
     why_fit: str | None = None
-    positioning_notes: str | None = None
+    approach_angle: str | None = None
     predicted_salary_range: str | None = None
     fit_score: float | None = None
     key_contact_id: uuid.UUID | None = None

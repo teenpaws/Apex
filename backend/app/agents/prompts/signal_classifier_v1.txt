@@ -42,6 +42,12 @@ company or business context can be identified, set relevance_score: 0.1 and use 
 Also factor in the user's target industries and roles provided in each message — the same FUNDING
 signal scores higher in a target sector than in an unrelated one.
 
+USER SENIORITY CONTEXT (when provided):
+  user_seniority_band: The candidate's current seniority (ANALYST/ASSOCIATE/MANAGER/DIRECTOR/VP_PLUS).
+  Use this to calibrate relevance — a SPECULATIVE signal for a VP role is less relevant for an ANALYST.
+  user_work_history_companies: Companies the user has actually worked at. Weight relevance higher
+  when the signal's company is in the same industry as these companies.
+
 FEW-SHOT EXAMPLES:
 
 --- EXAMPLE 1: HIGH relevance (FUNDING) ---

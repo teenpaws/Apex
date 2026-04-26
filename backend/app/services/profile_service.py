@@ -119,3 +119,117 @@ class ProfileService:
             if value is not None:
                 profile[key] = value
         return profile
+
+    # ── Pending review ────────────────────────────────────────────────────────
+
+    async def get_pending_review(self) -> dict:
+        """Return staged extraction output awaiting user approval."""
+        if self.use_mock:
+            return self._mock_pending_review()
+        return await self._live_pending_review()
+
+    def _mock_pending_review(self) -> dict:
+        return {
+            "has_pending": True,
+            "staged": {
+                "years_of_experience": 6,
+                "seniority_band": "ASSOCIATE",
+                "work_history": [
+                    {
+                        "company": "BCG",
+                        "title": "Senior Consultant",
+                        "start_year": 2021,
+                        "end_year": 2024,
+                        "summary": "Strategy engagements.",
+                    }
+                ],
+                "key_achievements": [
+                    {
+                        "achievement": "Led $12M cost reduction",
+                        "impact": "$12M savings",
+                        "context": "BCG",
+                    }
+                ],
+                "inferred_skills": ["strategy", "stakeholder management"],
+                "cover_letter_narratives": [],
+            },
+        }
+
+    async def _live_pending_review(self) -> dict:
+        import json
+        import uuid
+        import asyncpg
+        from app.db.session import get_asyncpg_db_url
+
+        conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+        try:
+            row = await conn.fetchrow(
+                "SELECT extraction_staging_json FROM career_profiles WHERE user_id = $1",
+                uuid.UUID(self.user_id),
+            )
+        finally:
+            await conn.close()
+
+        if not row or not row["extraction_staging_json"]:
+            return {"has_pending": False, "staged": None}
+
+        staged = (
+            json.loads(row["extraction_staging_json"])
+            if isinstance(row["extraction_staging_json"], str)
+            else row["extraction_staging_json"]
+        )
+        return {"has_pending": True, "staged": staged}
+
+    # ── Approval ──────────────────────────────────────────────────────────────
+
+    async def approve_extraction(self) -> dict:
+        """Apply staged extraction fields to career profile."""
+        if self.use_mock:
+            return {"approved": True, "profile_source": "RESUME"}
+        return await self._live_approve()
+
+    async def _live_approve(self) -> dict:
+        import json
+        import uuid
+        import asyncpg
+        from app.db.session import get_asyncpg_db_url
+
+        review = await self._live_pending_review()
+        if not review["has_pending"]:
+            return {"approved": False, "reason": "no pending extraction"}
+
+        staged = review["staged"]
+
+        conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+        try:
+            # Determine profile_source
+            existing_row = await conn.fetchrow(
+                'SELECT "current_role" FROM career_profiles WHERE user_id = $1',
+                uuid.UUID(self.user_id),
+            )
+            has_manual = bool(existing_row and existing_row["current_role"])
+            source = "BOTH" if has_manual else "RESUME"
+
+            await conn.execute(
+                """UPDATE career_profiles SET
+                     years_of_experience   = $1,
+                     seniority_band        = $2,
+                     education_json        = $3,
+                     work_history_json     = $4,
+                     key_achievements_json = $5,
+                     profile_source        = $6,
+                     last_analyzed_at      = NOW(),
+                     extraction_staging_json = NULL
+                   WHERE user_id = $7""",
+                staged.get("years_of_experience"),
+                staged.get("seniority_band"),
+                json.dumps(staged.get("education", [])),
+                json.dumps(staged.get("work_history", [])),
+                json.dumps(staged.get("key_achievements", [])),
+                source,
+                uuid.UUID(self.user_id),
+            )
+        finally:
+            await conn.close()
+
+        return {"approved": True, "profile_source": source}
