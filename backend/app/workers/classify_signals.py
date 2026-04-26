@@ -97,7 +97,7 @@ async def _load_signal_from_db(signal_id: str) -> dict[str, Any]:
             "user_target_industries": industries,
             "user_target_roles": target_roles,
             "user_seniority_band": enrichment["seniority_band"],
-            "user_work_history_industries": enrichment["work_history_industries"],
+            "user_work_history_companies": enrichment["work_history_industries"],
         }
     finally:
         await conn.close()
@@ -192,7 +192,7 @@ def _load_mock_signal(signal_id: str) -> dict[str, Any]:
         "user_target_industries": ["Fintech", "SaaS", "Consulting"],
         "user_target_roles": ["Strategy", "Operations", "Business Development"],
         "user_seniority_band": None,
-        "user_work_history_industries": [],
+        "user_work_history_companies": [],
     }
 
 
@@ -269,7 +269,7 @@ def classify_signal(self, signal_id: str) -> dict[str, Any]:
             user_target_roles=signal_data.get("user_target_roles", []),
             # Phase 15: pass enriched profile context (None-safe defaults)
             user_seniority_band=signal_data.get("user_seniority_band"),
-            user_work_history_industries=signal_data.get("user_work_history_industries", []),
+            user_work_history_companies=signal_data.get("user_work_history_companies", []),
         )
 
         output = await agent.classify(classifier_input)

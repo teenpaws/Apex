@@ -16,7 +16,7 @@ _BAND_KEYWORDS: dict[str, list[str]] = {
         "lead", "team lead",
     ],
     "DIRECTOR": [
-        "director", "principal", "head of", "head,",
+        "director", "principal", "head of", "head",
         "senior director",
     ],
     "VP_PLUS": [

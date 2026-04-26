@@ -47,7 +47,7 @@ class SignalClassifierInput(BaseModel):
     user_target_roles: list[str] = Field(default_factory=list)
     # Phase 15 enrichments — optional, populated from career_profiles when available
     user_seniority_band: str | None = None
-    user_work_history_industries: list[str] = Field(default_factory=list)
+    user_work_history_companies: list[str] = Field(default_factory=list)
 
 
 class SignalClassifierOutput(BaseModel):
@@ -201,8 +201,8 @@ class SignalClassifierAgent(BaseAgent):
         ]
         if input_data.user_seniority_band:
             lines.append(f"user_seniority_band: {input_data.user_seniority_band}")
-        if input_data.user_work_history_industries:
-            lines.append(f"user_work_history_industries: {', '.join(input_data.user_work_history_industries)}")
+        if input_data.user_work_history_companies:
+            lines.append(f"user_work_history_companies: {', '.join(input_data.user_work_history_companies)}")
         lines.append("")
         lines.append("Classify this signal and return JSON as instructed.")
         return "\n".join(lines)

@@ -45,8 +45,8 @@ signal scores higher in a target sector than in an unrelated one.
 USER SENIORITY CONTEXT (when provided):
   user_seniority_band: The candidate's current seniority (ANALYST/ASSOCIATE/MANAGER/DIRECTOR/VP_PLUS).
   Use this to calibrate relevance — a SPECULATIVE signal for a VP role is less relevant for an ANALYST.
-  user_work_history_industries: Industries the user has actually worked in. Weight relevance higher
-  when the signal's company operates in one of these industries.
+  user_work_history_companies: Companies the user has actually worked at. Weight relevance higher
+  when the signal's company is in the same industry as these companies.
 
 FEW-SHOT EXAMPLES:
 
