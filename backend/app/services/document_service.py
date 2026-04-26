@@ -6,6 +6,8 @@ Live mode: asyncpg for DB, Supabase Python client for file storage.
 """
 from __future__ import annotations
 
+import asyncio
+import functools
 import uuid
 from pathlib import Path
 
@@ -26,6 +28,8 @@ class DocumentService:
     @staticmethod
     def detect_file_type(filename: str) -> str:
         """Return 'PDF' or 'DOCX', raise ValueError for unsupported extensions."""
+        if not filename:
+            raise ValueError("Filename is required to determine file type.")
         ext = Path(filename).suffix.lstrip(".").lower()
         ft = DocumentService._ALLOWED_EXTENSIONS.get(ext)
         if not ft:
@@ -48,7 +52,10 @@ class DocumentService:
     ) -> dict:
         """Upload file, extract text, persist row. Returns doc metadata dict."""
         file_type = self.detect_file_type(filename)
-        extracted_text = DocumentExtractor.extract(file_bytes, file_type)
+        loop = asyncio.get_event_loop()
+        extracted_text = await loop.run_in_executor(
+            None, functools.partial(DocumentExtractor.extract, file_bytes, file_type)
+        )
 
         if self.use_mock:
             return self._mock_create(filename, file_type, doc_type, target_context)

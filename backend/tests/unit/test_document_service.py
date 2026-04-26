@@ -67,3 +67,13 @@ class TestDocumentServiceMock:
         from app.services.document_service import DocumentService
         with pytest.raises(ValueError, match="Unsupported"):
             DocumentService.detect_file_type("resume.txt")
+
+    def test_detect_file_type_empty_filename_raises(self):
+        from app.services.document_service import DocumentService
+        with pytest.raises(ValueError, match="Filename is required"):
+            DocumentService.detect_file_type("")
+
+    def test_detect_file_type_no_extension_raises(self):
+        from app.services.document_service import DocumentService
+        with pytest.raises(ValueError):
+            DocumentService.detect_file_type("resume")
