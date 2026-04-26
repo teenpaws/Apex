@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { StagedProfile } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -116,7 +117,7 @@ export interface UploadedDoc {
 
 export interface PendingReview {
   has_pending: boolean;
-  staged: Record<string, unknown> | null;
+  staged: StagedProfile | null;
 }
 
 export const documentsApi = {

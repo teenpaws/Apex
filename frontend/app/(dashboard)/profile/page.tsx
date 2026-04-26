@@ -19,8 +19,7 @@ import { profileApi, documentsApi } from '@/lib/api/client';
 import type { DocumentRecord } from '@/lib/api/client';
 import { DocumentUploadSection } from '@/components/profile/DocumentUploadSection';
 import { ExtractionReviewPanel } from '@/components/profile/ExtractionReviewPanel';
-import type { StagedProfile } from '@/components/profile/ExtractionReviewPanel';
-import type { CareerProfile } from '@/types';
+import type { CareerProfile, StagedProfile } from '@/types';
 
 // ── Tag input component ───────────────────────────────────────────────────────
 
@@ -118,7 +117,7 @@ export default function ProfilePage() {
   // Document intelligence state (Phase 15)
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [hasPending, setHasPending] = useState(false);
-  const [staged, setStaged] = useState<Record<string, unknown> | null>(null);
+  const [staged, setStaged] = useState<StagedProfile | null>(null);
 
   // Sync form when profile loads
   useEffect(() => {
@@ -283,7 +282,7 @@ export default function ProfilePage() {
       {hasPending && staged && (
         <>
           <ExtractionReviewPanel
-            staged={staged as unknown as StagedProfile}
+            staged={staged}
             onApproved={() => {
               setHasPending(false);
               setStaged(null);

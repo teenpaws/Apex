@@ -144,6 +144,28 @@ export interface DashboardStats {
   };
 }
 
+export interface StagedProfile {
+  years_of_experience: number;
+  seniority_band: string;
+  work_history?: {
+    company: string;
+    title: string;
+    start_year?: number;
+    end_year?: number;
+    summary?: string;
+  }[];
+  key_achievements?: {
+    achievement: string;
+    impact?: string;
+    context?: string;
+  }[];
+  inferred_skills?: string[];
+  cover_letter_narratives?: {
+    target_context: string;
+    core_narrative: string;
+  }[];
+}
+
 export interface ApiResponse<T> {
   data: T;
   error?: string;

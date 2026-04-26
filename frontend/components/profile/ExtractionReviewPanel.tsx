@@ -5,28 +5,9 @@ import { documentsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Loader2 } from "lucide-react";
+import type { StagedProfile } from "@/types";
 
-export interface StagedProfile {
-  years_of_experience: number;
-  seniority_band: string;
-  work_history?: {
-    company: string;
-    title: string;
-    start_year?: number;
-    end_year?: number;
-    summary?: string;
-  }[];
-  key_achievements?: {
-    achievement: string;
-    impact?: string;
-    context?: string;
-  }[];
-  inferred_skills?: string[];
-  cover_letter_narratives?: {
-    target_context: string;
-    core_narrative: string;
-  }[];
-}
+export type { StagedProfile };
 
 interface Props {
   staged: StagedProfile;
