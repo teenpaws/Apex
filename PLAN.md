@@ -1,7 +1,7 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-25 | Current Phase: **Phase 15 — Resume & Document Intelligence** | NOT STARTED 🔲
+> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Next: **Phase 16 — Action Page Revamp**
 > Multi-user self-host distribution (Phases 20–24) planned — see `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
@@ -1171,13 +1171,30 @@ curl http://localhost:8000/api/v1/signals
 
 **Goal:** Users upload their resume and cover letters. A Profile Extractor Agent parses them into structured career data, enriching all downstream agents with real experience, seniority, achievements, and positioning narratives.
 
-**Status:** 🔲 NOT STARTED
+**Status:** ✅ COMPLETE — 2026-04-26
 
-**Prerequisite:** Phase 14 complete.
+**Prerequisite:** Phase 14 complete. ✅
+
+**What was built:**
+- DB migrations 015 (`user_documents`), 016 (career_profiles Phase 15 columns), 017 (`positioning_notes` → `approach_angle` rename)
+- `DocumentExtractor` service (pdfplumber + python-docx, async-safe via `run_in_executor`)
+- `DocumentService` + full document CRUD API (`POST /profile/documents`, `GET`, `DELETE`, `POST /analyze`, `GET /pending-review`, `POST /approve`)
+- `ProfileExtractorAgent` (Claude Sonnet) — extracts `years_of_experience`, `seniority_band`, `work_history`, `key_achievements`, `cover_letter_narratives`
+- Celery `extract_profile` worker with staging JSON approval flow
+- `SeniorityGate` utility — maps role title → seniority band; downgrades confidence if predicted role is 2+ bands above user
+- Signal Classifier enriched: `user_seniority_band` + `user_work_history_companies` in input
+- Opportunity Predictor enriched: `seniority_band`, `years_of_experience`, `work_history_summary` in input
+- Career Fit Scorer enriched: `work_history`, `key_achievements` in user profile input
+- Positioning Advisor enriched: `cover_letter_narratives` (target-context matched), `key_achievements`
+- Email Drafter enriched: `key_achievements`, `cover_letter_narratives` (target-context matched)
+- Frontend: `DocumentUploadSection` component (upload, label, delete, analyze trigger)
+- Frontend: `ExtractionReviewPanel` component (staged profile display + approve button)
+- `StagedProfile` shared type in `frontend/types/index.ts`
+- 104 unit tests, 0 failures
 
 ---
 
-### Sprint 15.1 — Document Upload & Storage
+### Sprint 15.1 — Document Upload & Storage ✅
 
 **Backend:**
 - Add `user_documents` table migration (see CLAUDE.md Section 4 for schema)
@@ -1206,7 +1223,7 @@ curl http://localhost:8000/api/v1/signals
 
 ---
 
-### Sprint 15.2 — Profile Extractor Agent
+### Sprint 15.2 — Profile Extractor Agent ✅
 
 **New agent:** `backend/app/agents/profile_extractor.py`
 
@@ -1259,7 +1276,7 @@ curl http://localhost:8000/api/v1/signals
 
 ---
 
-### Sprint 15.3 — Wire Enriched Profile to All Agents
+### Sprint 15.3 — Wire Enriched Profile to All Agents ✅
 
 Update all agent input schemas and prompts to consume the new profile fields:
 
@@ -1293,7 +1310,7 @@ Update all agent input schemas and prompts to consume the new profile fields:
 
 ---
 
-### Sprint 15.4 — Seniority Gate & FE Profile Review UI
+### Sprint 15.4 — Seniority Gate & FE Profile Review UI ✅
 
 **Seniority gate** (already described in Sprint 15.3 — implement here alongside FE):
 - `SeniorityGate` utility class: maps role title keywords → `seniority_band` enum

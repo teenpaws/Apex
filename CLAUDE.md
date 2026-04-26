@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-25 | Phase 14: COMPLETE ✅ | Phase 15: NOT STARTED | Next: Phase 15 — Resume & Document Intelligence
+> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Next: Phase 16 — Action Page Revamp
 > Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
@@ -619,6 +619,12 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-24 | No formal release cadence; no in-app migration system | User pastes one-shot `schema/initial.sql` on install. `supabase/migrations/` folder lives in git for history only. Downstream forks reconcile changes themselves if they pull updates (with Claude's help — explicitly part of the documented support story). |
 | 2026-04-24 | License: MIT | User: "do whatever you want with it." MIT is shortest, most permissive, zero compliance burden. Matches "ship it and walk away" ethos. Not AGPL (forces forks to open-source, which user doesn't care about). Not Apache (patent grant clauses irrelevant for this scope). |
 | 2026-04-24 | Phases 20–24 added — multi-user self-host enablement | Phase 20 (foundations), 21 (Railway template), 22 (first-run setup UX), 23 (docs + screenshots), 24 (launch polish). Phases 21 + 22 run in parallel after 20; 23 needs screenshots from both; 24 is the launch. Full spec: `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`. |
+| 2026-04-26 | Phase 15 complete — Resume & Document Intelligence shipped | `user_documents` table + Supabase Storage upload; pdfplumber + python-docx local extraction (no API cost); `ProfileExtractorAgent` (Sonnet) extracts seniority_band, work_history, key_achievements, cover_letter_narratives; Celery worker with staging JSON approval flow; `SeniorityGate` downgrades opportunity confidence if predicted role is 2+ bands above user; all downstream agents (Signal Classifier, Opportunity Predictor, Career Fit Scorer, Positioning Advisor, Email Drafter) enriched with Phase 15 profile fields; frontend `DocumentUploadSection` + `ExtractionReviewPanel` components. 104 unit tests, 0 failures. |
+| 2026-04-26 | `user_work_history_industries` renamed to `user_work_history_companies` in Signal Classifier | Field contains company names (e.g., "McKinsey", "BCG"), not industry labels. Misleading name could cause Claude to reason incorrectly about industry coverage. Renamed in `signal_classifier.py`, `classify_signals.py`, and `signal_classifier_v1.txt`. |
+| 2026-04-26 | `SeniorityGate.detect_band` uses word-boundary regex (`\b`) | Naive substring `in` check causes false positives ("VP of Business Direction" matching "director"). Word-boundary regex ensures "director" only matches when surrounded by word breaks. Also fixed `"head,"` keyword (comma prevented `\bhead\b` matching) → corrected to `"head"`. |
+| 2026-04-26 | `StagedProfile` TypeScript interface moved to `frontend/types/index.ts` | Originally defined inside `ExtractionReviewPanel.tsx`. `api.ts` needed to import it for `PendingReview.staged` typing, which would create a circular dependency (api.ts → component → api.ts). Moved to shared types file — no cast needed anywhere. |
+| 2026-04-26 | `DocumentExtractor.extract()` wrapped in `run_in_executor` | pdfplumber is CPU-bound synchronous code. Calling it directly inside an `async` FastAPI handler blocks the event loop. Wrapped in `asyncio.get_event_loop().run_in_executor(None, ...)` to offload to thread pool. |
+| 2026-04-26 | Cover letter narrative selection: substring match on `target_context` | Both Positioning Advisor and Email Drafter need the most relevant cover letter for a given opportunity. Implemented as a shared `_select_cover_letter_narrative()` helper: case-insensitive substring check of each narrative's `target_context` against the opportunity context string; falls back to first entry if no match. |
 
 ---
 
