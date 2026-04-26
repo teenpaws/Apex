@@ -198,19 +198,17 @@ class ProfileExtractorAgent(BaseAgent):
     def _parse_response(self, raw_text: str) -> ProfileExtractorOutput:
         """Parse Claude's JSON response into ProfileExtractorOutput."""
         text = raw_text.strip()
-        # Strip markdown fences if present
-        if text.startswith("```"):
-            lines = text.splitlines()
-            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-
         try:
             data = json.loads(text)
-            return ProfileExtractorOutput(**data)
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.error("profile_extractor failed to parse response: %s", exc)
+        except json.JSONDecodeError as exc:
+            logger.error(
+                "profile_extractor non-JSON response (first 200 chars): %s",
+                text[:200],
+            )
             raise ValueError(
-                f"ProfileExtractor response parse failed: {exc}"
+                f"ProfileExtractor returned non-JSON: {text[:200]}"
             ) from exc
+        return ProfileExtractorOutput(**data)
 
 
 # Alias for convenience

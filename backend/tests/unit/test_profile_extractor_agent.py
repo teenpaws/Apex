@@ -109,10 +109,10 @@ class TestProfileExtractorMockMode:
     async def test_mock_no_claude_api_call(self):
         from app.agents.profile_extractor import ProfileExtractorAgent
         from app.core.config import get_settings
-        with patch("anthropic.AsyncAnthropic") as mock_client:
+        with patch("anthropic.AsyncAnthropic") as mock_anthropic:
             agent = ProfileExtractorAgent(settings=get_settings())
             await agent.extract(_sample_input())
-            mock_client.assert_not_called()
+            mock_anthropic.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_run_method_returns_dict(self):
