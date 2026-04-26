@@ -22,42 +22,42 @@ class AgentConfig(TypedDict):
 AGENT_REGISTRY: dict[str, AgentConfig] = {
     "signal_classifier": {
         "model": "claude-haiku-4-5-20251001",
-        "version": "1.0",
-        "prompt_file": "prompts/signal_classifier_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/signal_classifier_v2.txt",
     },
     "opportunity_predictor": {
         "model": "claude-sonnet-4-6",
-        "version": "1.1",
-        "prompt_file": "prompts/opportunity_predictor_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/opportunity_predictor_v2.txt",
     },
     "career_fit_scorer": {
         "model": "claude-sonnet-4-6",
-        "version": "1.0",
-        "prompt_file": "prompts/career_fit_scorer_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/career_fit_scorer_v2.txt",
     },
     "positioning_advisor": {
         "model": "claude-sonnet-4-6",
-        "version": "1.0",
-        "prompt_file": "prompts/positioning_advisor_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/positioning_advisor_v2.txt",
     },
     "email_drafter": {
         "model": "claude-sonnet-4-6",
-        "version": "1.0",
-        "prompt_file": "prompts/email_drafter_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/email_drafter_v2.txt",
     },
     "action_generator": {
         "model": "claude-haiku-4-5-20251001",
-        "version": "1.0",
-        "prompt_file": "prompts/action_generator_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/action_generator_v2.txt",
     },
     "batch_signal_classifier": {
         "model": "claude-sonnet-4-6",
-        "version": "1.0",
-        "prompt_file": "prompts/batch_signal_classifier_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/batch_signal_classifier_v2.txt",
     },
     "profile_extractor": {
         "model": "claude-sonnet-4-6",
-        "version": "1.0",
-        "prompt_file": "prompts/profile_extractor_v1.txt",
+        "version": "2.0",
+        "prompt_file": "prompts/profile_extractor_v2.txt",
     },
 }

@@ -191,7 +191,7 @@ class OpportunityPredictorAgent(BaseAgent):
 
     def _load_system_prompt(self) -> str:
         from pathlib import Path
-        prompt_path = Path(__file__).parent / "prompts" / "opportunity_predictor_v1.txt"
+        prompt_path = Path(__file__).parent / "prompts" / "opportunity_predictor_v2.txt"
         if not prompt_path.exists():
             raise FileNotFoundError(
                 f"Opportunity predictor prompt not found at {prompt_path}."

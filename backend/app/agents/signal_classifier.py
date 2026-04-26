@@ -178,11 +178,11 @@ class SignalClassifierAgent(BaseAgent):
 
     def _load_system_prompt(self) -> str:
         """Load the system prompt from the prompts directory."""
-        prompt_path = _PROMPTS_DIR / "signal_classifier_v1.txt"
+        prompt_path = _PROMPTS_DIR / "signal_classifier_v2.txt"
         if not prompt_path.exists():
             raise FileNotFoundError(
                 f"Signal classifier prompt not found at {prompt_path}. "
-                "Ensure backend/app/agents/prompts/signal_classifier_v1.txt exists."
+                "Ensure backend/app/agents/prompts/signal_classifier_v2.txt exists."
             )
         return prompt_path.read_text(encoding="utf-8")
 

@@ -1068,31 +1068,82 @@ curl http://localhost:8000/api/v1/signals
 
 ---
 
-### Note: Agent Prompt v2 — Required Before v1.5 / Multi-User Expansion
+### Note: Agent Prompts V2 (Static) — ✅ SHIPPED 2026-04-26
 
-> **Current state (v1.0):** The three agent prompts rewritten in Sprint 13.2
-> (`signal_classifier_v1.txt`, `opportunity_predictor_v1.txt`, `career_fit_scorer_v1.txt`)
-> are intentionally hardcoded to the HEC Paris MBA persona — specific target sectors
-> (Consulting, PE, Tech, FinServ), role archetypes, scoring anchors, and few-shot examples
-> reflect a single known user. This is the right call for v1.0: specificity improves output
-> quality for the current user at zero extra cost.
+> **What was done:** All 8 agent prompts (`signal_classifier`, `batch_signal_classifier`,
+> `opportunity_predictor`, `career_fit_scorer`, `positioning_advisor`, `email_drafter`,
+> `action_generator`, `profile_extractor`) rewritten as `_v2.txt` and the registry +
+> per-agent `_load_system_prompt()` paths flipped from `_v1.txt` → `_v2.txt`.
+> V1 files retained on disk for diff/rollback.
 >
-> **The problem at v1.5:** When the platform expands to an MBA cohort or broader market,
-> these hardcoded assumptions break. A user targeting healthcare or public sector will get
-> miscalibrated relevance scores and irrelevant role predictions.
+> **Improvements over V1:**
+> - **Anthropic prompt-engineering patterns**: XML-tagged sections (`<role>`, `<inputs_you_receive>`,
+>   `<reasoning_steps>`, `<output_schema>`, `<final_rules>`), explicit chain-of-thought reasoning
+>   steps before output, anchor anti-pattern callouts (`✗ Bad / ✓ Good`).
+> - **Full use of Phase 14/15 fields** in prompt instructions and few-shot examples:
+>   `seniority_band`, `years_of_experience`, `work_history`, `key_achievements`,
+>   `cover_letter_narratives`, `real_postings`.
+> - **Stronger evidence requirements**:
+>   - `opportunity_predictor` must cite each driving signal with `signal_id` + ≤15-word `key_quote`.
+>   - `career_fit_scorer` must reference ≥2 dimensions by name AND cite a specific `work_history`
+>     entry or `key_achievement`.
+>   - `positioning_advisor` + `email_drafter` must cite at least one specific `key_achievement`.
+> - **Phase 16 readiness**: `action_generator` v2 emits required `intended_effect` field.
+> - **Profile extractor robustness**: whole-word seniority detection callout (avoids substring
+>   false positives like "VP of Business Direction" matching DIRECTOR).
+> - **Seniority gate alignment**: `opportunity_predictor` v2 explicitly forces SPECULATIVE when
+>   the implied role is 2+ bands above user — pre-empts the post-prediction gate downgrade.
+
+---
+
+### Note: Agent Prompts V3 — Dynamic Prompt-Builder Layer (Required for v1.5 Multi-User)
+
+> **Current state (v2):** Static `.txt` prompts. Persona context (HEC MBA, target sectors, role
+> archetypes, scoring anchors, few-shot examples) is still baked into the prompt strings. The user's
+> profile fields are passed in the user-message JSON, but the prompt's *frame* assumes an MBA
+> consulting/PE/tech/finserv candidate.
 >
-> **What v2 prompts must do differently:**
-> - Remove all hardcoded persona details (sectors, role archetypes, scoring examples)
-> - Inject ALL user context dynamically from `career_profiles` at call time (target industries,
->   target roles, aspirations_text, seniority level, geography)
-> - Signal classifier: relevance scoring rubric derived from user profile, not baked into prompt
-> - Opportunity predictor: archetype table generated from user's target roles, not a fixed list
-> - Career fit scorer: dimension weights adjustable per user (e.g. geography matters more for
->   some users than others)
-> - Requires a prompt-builder layer (not a static .txt file) — likely a Jinja2 template or
->   Python f-string builder that assembles the system prompt from profile data
+> **The problem at v1.5:** When Apex expands to an MBA cohort or broader market, hardcoded
+> persona breaks. A healthcare or public-sector user gets miscalibrated relevance scores,
+> irrelevant role archetypes, and few-shot examples that point them away from their actual targets.
 >
-> **Target version:** v1.5 (before cohort launch). Do not ship multi-user without this.
+> **What V3 must do differently:**
+> - Remove all hardcoded persona from the prompt body (sectors, role archetypes, scoring examples).
+> - Inject ALL persona context dynamically from `career_profiles` at call time (target industries,
+>   target roles, aspirations_text, seniority level, geography, persona archetype).
+> - Per-agent persona context injected via a dedicated builder:
+>   - **Signal classifier**: relevance scoring rubric derived from user profile, not baked in.
+>   - **Opportunity predictor**: archetype table generated from user's target roles + industry, not fixed.
+>   - **Career fit scorer**: dimension weights adjustable per user (e.g. geography weight higher
+>     for users who flagged geography as a hard constraint).
+>   - **Positioning advisor / email drafter**: tone-style library selectable from user preference.
+>   - **Profile extractor**: seniority band rubric parameterised by industry (banking ≠ tech).
+>
+> **Architecture: prompt-builder layer.**
+> - Replace static `prompt_path.read_text()` in each agent's `_load_system_prompt()` with a call to
+>   a `PromptBuilder` class.
+> - `PromptBuilder.build(agent_name, persona_context)` returns the assembled system prompt.
+> - Prompt sources move from `prompts/*.txt` to `prompts/*.j2` (Jinja2) OR to a Python f-string
+>   builder module per agent.
+> - Each agent's input schema gains a `persona_context: PersonaContext` field (built once at
+>   request time from the user's `career_profiles` row + preferences).
+> - Few-shot examples either parameterised inside the template OR loaded from a per-user-archetype
+>   library (e.g. `fixtures/few_shot/healthcare_director.json`).
+> - System-prompt prompt-cache breakpoint moves to AFTER the persona-context block — so cache hits
+>   are scoped per user, not globally. Acceptable trade-off; per-user cache hit rate is still high
+>   because each user makes many calls in a session.
+>
+> **Migration path from V2 → V3:**
+> 1. Keep V2 static files in place — they become the fallback / single-user template.
+> 2. Build `PromptBuilder` infra + `PersonaContext` schema.
+> 3. Convert prompts one agent at a time, starting with `opportunity_predictor` (highest impact)
+>    and `career_fit_scorer` (most persona-sensitive scoring).
+> 4. A/B test V2 vs V3 on existing single-user corpus — V3 must not regress quality on the
+>    current user before rolling out.
+> 5. Switch registry version to `3.0` per agent as it migrates.
+>
+> **Target version:** v1.5. Do not ship multi-user without this.
+> **Prerequisite:** v1.0 stable (Phases 16–19 complete) before starting V3.
 
 ---
 

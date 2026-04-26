@@ -107,7 +107,7 @@ class BatchSignalClassifierAgent(BaseAgent):
 
     def _load_system_prompt(self) -> str:
         from pathlib import Path
-        prompt_path = Path(__file__).parent / "prompts" / "batch_signal_classifier_v1.txt"
+        prompt_path = Path(__file__).parent / "prompts" / "batch_signal_classifier_v2.txt"
         if not prompt_path.exists():
             raise FileNotFoundError(f"Batch classifier prompt not found: {prompt_path}")
         return prompt_path.read_text(encoding="utf-8")

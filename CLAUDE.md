@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Next: Phase 16 — Action Page Revamp
+> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
 > Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
@@ -223,14 +223,14 @@ agent_runs: id, user_id, agent_name, model_used,
 All agents are registered in `backend/app/agents/registry.py` — a single manifest dict:
 ```python
 AGENT_REGISTRY = {
-    "signal_classifier":    {"model": "claude-haiku-4-5-20251001",  "version": "1.0", "prompt_file": "prompts/signal_classifier_v1.txt"},
-    "opportunity_predictor":{"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/opportunity_predictor_v1.txt"},
-    "career_fit_scorer":    {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/career_fit_scorer_v1.txt"},
-    "positioning_advisor":  {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/positioning_advisor_v1.txt"},
-    "email_drafter":        {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/email_drafter_v1.txt"},
-    "action_generator":     {"model": "claude-haiku-4-5-20251001",  "version": "1.0", "prompt_file": "prompts/action_generator_v1.txt"},
-    # Phase 15:
-    "profile_extractor":    {"model": "claude-sonnet-4-6",           "version": "1.0", "prompt_file": "prompts/profile_extractor_v1.txt"},
+    "signal_classifier":         {"model": "claude-haiku-4-5-20251001", "version": "2.0", "prompt_file": "prompts/signal_classifier_v2.txt"},
+    "opportunity_predictor":     {"model": "claude-sonnet-4-6",          "version": "2.0", "prompt_file": "prompts/opportunity_predictor_v2.txt"},
+    "career_fit_scorer":         {"model": "claude-sonnet-4-6",          "version": "2.0", "prompt_file": "prompts/career_fit_scorer_v2.txt"},
+    "positioning_advisor":       {"model": "claude-sonnet-4-6",          "version": "2.0", "prompt_file": "prompts/positioning_advisor_v2.txt"},
+    "email_drafter":             {"model": "claude-sonnet-4-6",          "version": "2.0", "prompt_file": "prompts/email_drafter_v2.txt"},
+    "action_generator":          {"model": "claude-haiku-4-5-20251001", "version": "2.0", "prompt_file": "prompts/action_generator_v2.txt"},
+    "batch_signal_classifier":   {"model": "claude-sonnet-4-6",          "version": "2.0", "prompt_file": "prompts/batch_signal_classifier_v2.txt"},
+    "profile_extractor":         {"model": "claude-sonnet-4-6",          "version": "2.0", "prompt_file": "prompts/profile_extractor_v2.txt"},
 }
 ```
 Use `AGENT_REGISTRY` as the single source of model/version truth — never hardcode model names elsewhere.
@@ -535,7 +535,8 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | Supabase Realtime push (instead of polling) | Polling is simpler for v1.0 | v1.5 |
 | Rate limiting middleware (100 req/min/user) | Single user in v1.0 | v1.5 |
 | Agent prompt A/B testing framework | Overkill for single user | v2.0 |
-| Agent prompt v2 — generalised, user-agnostic versions | v1.0 prompts hardcoded for HEC MBA persona. Must inject all persona context dynamically (seniority, industries, role archetypes) from career_profiles at call time. Requires Jinja2/f-string prompt builder layer. | v1.5 |
+| Agent prompts v2 (static) — Phase 14/15-aware, Anthropic-pattern rewrite | ✅ SHIPPED 2026-04-26. All 8 prompts rewritten with XML-tagged structure, explicit reasoning_steps, anchor anti-pattern callouts, and full use of Phase 14/15 fields (seniority_band, work_history, key_achievements, cover_letter_narratives, real_postings). Registry + agent .py paths flipped from `_v1.txt` → `_v2.txt`. | DONE |
+| Agent prompts v3 — dynamic prompt-builder layer (Jinja2 / f-string) | Static V2 prompts still bake the HEC MBA persona into role archetypes, scoring anchors, and few-shot examples. Multi-user installs (a healthcare or public-sector user) will get miscalibrated outputs. v3 must inject ALL persona context dynamically from `career_profiles` at call time: target industries, target roles, seniority anchors, role-archetype table, dimension weights. Requires a prompt-builder layer (Jinja2 template OR Python f-string assembler) replacing the static `.txt` load in each `_load_system_prompt()` method. Each agent's input schema gets a `persona_context` dict passed to the builder. Few-shot examples either parameterised or pulled from a per-user library. Do not ship multi-user without this. | v1.5 |
 | Celery Flower monitoring dashboard | Nice-to-have ops tooling | v1.5 |
 | Multi-user RLS policy audit | Architecture cohort-ready but untested at scale | v1.5 |
 | PDL rate limit queue (dedicated priority lane) | Low volume in v1.0 | v1.5 |
@@ -625,6 +626,8 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-26 | `StagedProfile` TypeScript interface moved to `frontend/types/index.ts` | Originally defined inside `ExtractionReviewPanel.tsx`. `api.ts` needed to import it for `PendingReview.staged` typing, which would create a circular dependency (api.ts → component → api.ts). Moved to shared types file — no cast needed anywhere. |
 | 2026-04-26 | `DocumentExtractor.extract()` wrapped in `run_in_executor` | pdfplumber is CPU-bound synchronous code. Calling it directly inside an `async` FastAPI handler blocks the event loop. Wrapped in `asyncio.get_event_loop().run_in_executor(None, ...)` to offload to thread pool. |
 | 2026-04-26 | Cover letter narrative selection: substring match on `target_context` | Both Positioning Advisor and Email Drafter need the most relevant cover letter for a given opportunity. Implemented as a shared `_select_cover_letter_narrative()` helper: case-insensitive substring check of each narrative's `target_context` against the opportunity context string; falls back to first entry if no match. |
+| 2026-04-26 | Agent prompts V2 shipped — all 8 prompts rewritten | V1 prompts predated Phase 14/15 enrichments and used loose prose structure. V2 applies Anthropic prompting best practices: XML-tagged sections (`<role>`, `<inputs_you_receive>`, `<reasoning_steps>`, `<output_schema>`, `<final_rules>`), explicit chain-of-thought reasoning steps, anchor anti-pattern callouts (`✗ Bad / ✓ Good`), and full use of Phase 14/15 fields — `seniority_band`, `years_of_experience`, `work_history`, `key_achievements`, `cover_letter_narratives`. New requirements baked in: opportunity_predictor cites signal_id + ≤15-word key_quote per signal; career_fit_scorer must reference 2+ dimensions by name AND cite a specific work_history entry or key_achievement; positioning_advisor and email_drafter must cite at least one specific key_achievement; action_generator outputs required `intended_effect` (Phase 16 ready); profile_extractor uses whole-word seniority detection. Registry + 8 agent `.py` files updated to load `_v2.txt`. V1 files retained on disk for diff/rollback. |
+| 2026-04-26 | Direct commit to master for V2 prompt swap (exception to phase-branch rule) | CLAUDE.md §12 mandates `phase/{N}-{name}` branches via PR for all work. V2 prompt swap is a horizontal upgrade across all 8 agents — does not belong to any single phase, and gating it behind a Phase 16 branch would delay benefits to every running agent. User explicitly authorised direct commit. Future horizontal upgrades (e.g. v3 prompt-builder layer) should follow the same pattern only with explicit authorisation. |
 
 ---
 

@@ -178,7 +178,7 @@ class EmailDrafterAgent(BaseAgent):
         return output.model_dump(mode="json")
 
     def _load_system_prompt(self) -> str:
-        prompt_path = Path(__file__).parent / "prompts" / "email_drafter_v1.txt"
+        prompt_path = Path(__file__).parent / "prompts" / "email_drafter_v2.txt"
         if not prompt_path.exists():
             raise FileNotFoundError(
                 f"Email drafter prompt not found at {prompt_path}."

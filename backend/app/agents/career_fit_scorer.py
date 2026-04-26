@@ -173,7 +173,7 @@ class CareerFitScorerAgent(BaseAgent):
 
     def _load_system_prompt(self) -> str:
         from pathlib import Path
-        prompt_path = Path(__file__).parent / "prompts" / "career_fit_scorer_v1.txt"
+        prompt_path = Path(__file__).parent / "prompts" / "career_fit_scorer_v2.txt"
         if not prompt_path.exists():
             raise FileNotFoundError(
                 f"Career fit scorer prompt not found at {prompt_path}."

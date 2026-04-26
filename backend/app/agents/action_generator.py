@@ -179,7 +179,7 @@ class ActionGeneratorAgent(BaseAgent):
 
     def _load_system_prompt(self) -> str:
         from pathlib import Path
-        prompt_path = Path(__file__).parent / "prompts" / "action_generator_v1.txt"
+        prompt_path = Path(__file__).parent / "prompts" / "action_generator_v2.txt"
         if not prompt_path.exists():
             raise FileNotFoundError(
                 f"Action generator prompt not found at {prompt_path}."
