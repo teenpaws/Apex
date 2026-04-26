@@ -82,6 +82,10 @@ def _load_mock_company_context(user_id: str, company_id: str) -> dict[str, Any]:
                 "lead AI transformation projects for global enterprises."
             ),
             "skills": ["Strategy", "AI/ML", "Change Management", "Executive Stakeholder Management"],
+            # Phase 15 enrichments
+            "seniority_band": None,
+            "years_of_experience": None,
+            "work_history_summary": [],
         },
     }
 
@@ -155,13 +159,27 @@ async def _live_load_company_context(user_id: str, company_id: str) -> dict[str,
         )
         profile_row = await conn.fetchrow(
             """
-            SELECT current_role, target_roles, industries, aspirations_text
+            SELECT current_role, target_roles, industries, aspirations_text,
+                   seniority_band, years_of_experience, work_history_json
             FROM career_profiles WHERE user_id = $1
             """,
             _uuid.UUID(user_id),
         )
     finally:
         await conn.close()
+
+    # Phase 15: extract work_history_summary from work_history_json
+    work_history_summary: list[str] = []
+    if profile_row and profile_row["work_history_json"]:
+        import json as _json  # noqa: PLC0415
+        wh = profile_row["work_history_json"]
+        if isinstance(wh, str):
+            wh = _json.loads(wh)
+        work_history_summary = [
+            f"{entry.get('title', '')} at {entry.get('company', '')}"
+            for entry in (wh or [])
+            if entry.get("company")
+        ][:5]
 
     return {
         "company_name": company_row["name"] if company_row else "Unknown",
@@ -182,6 +200,10 @@ async def _live_load_company_context(user_id: str, company_id: str) -> dict[str,
             "industries": list(profile_row["industries"] or []) if profile_row else [],
             "aspirations_text": profile_row["aspirations_text"] or "" if profile_row else "",
             "skills": [],
+            # Phase 15 enrichments
+            "seniority_band": profile_row["seniority_band"] if profile_row else None,
+            "years_of_experience": profile_row["years_of_experience"] if profile_row else None,
+            "work_history_summary": work_history_summary,
         },
     }
 
@@ -344,6 +366,19 @@ def predict_for_company(self, user_id: str, company_id: str) -> dict[str, Any]:
             user_profile=UserProfileSummary(**ctx["user_profile"]),
         )
         output = await agent.predict(predictor_input)
+
+        # Phase 15: apply seniority gate — downgrade confidence if role is 2+ bands above user
+        from app.services.seniority_gate import SeniorityGate  # noqa: PLC0415
+        gate_result = SeniorityGate.apply(
+            user_band=ctx["user_profile"].get("seniority_band"),
+            predicted_role=output.predicted_role,
+            original_confidence=output.confidence,
+        )
+        if gate_result["was_downgraded"]:
+            logger.info("seniority_gate: %s", gate_result["reason"])
+            output = output.model_copy(
+                update={"confidence": gate_result["gated_confidence"]}
+            )
 
         # 3. Store opportunity
         if settings.USE_MOCK_DATA:
