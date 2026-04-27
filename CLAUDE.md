@@ -374,6 +374,10 @@ Speculative: "bg-muted text-muted-foreground border-border"
 | POST | `/profile/documents` | Upload resume or cover letter (multipart/form-data) → returns `{doc_id}` (Phase 15) |
 | DELETE | `/profile/documents/{id}` | Remove document + clear extracted contribution (Phase 15) |
 | POST | `/profile/documents/{id}/approve` | Accept extracted fields into career profile (Phase 15) |
+| GET | `/profile/target-companies` | List user's target companies with signal counts (Phase 17B) |
+| POST | `/profile/target-companies` | Add a company to target list by name or ID (Phase 17B) |
+| DELETE | `/profile/target-companies/{company_id}` | Remove a company from target list (Phase 17B) |
+| POST | `/profile/target-companies/suggest` | AI "Find 10 More Like These" — returns `[{name, domain, industry, why_similar}]` (Phase 17B) |
 | GET | `/companies/{id}` | Company detail + signals + opportunities |
 | GET | `/contacts` | User's saved contacts (incl. linkedin_url from PDL) |
 | POST | `/contacts/search` | Search PDL by company + title keywords |
@@ -551,6 +555,7 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | Historical backtesting (predict from past signals, validate against actuals) | Requires Adzuna job board integration (Phase 14) as prerequisite. Post-MVP validation tool. | Phase 19 |
 | Resume/cover letter generation feature | Enabled by Phase 15 Profile Extractor (structured work_history + achievements). Generate tailored 1-page resume or cover letter for a specific opportunity. | Phase 20 |
 | Profile extraction approval UX: switch from user-approval to auto-overwrite | Currently user must approve extracted fields (Option B — safer for v1.0). At v1.5 with multiple users, consider auto-overwrite for first upload + diff-based approval for subsequent uploads. Configurable via `PROFILE_EXTRACTION_MODE` env var. | v1.5 |
+| Target Company Intelligence (Phase 17B) | Users manually add target companies in Profile page + AI "Find Similar" button suggests 10 more based on profile + existing targets. Approved companies seed the pipeline. Requires `target_company_ids uuid[]` on `career_profiles` + 3 new profile endpoints + inline Sonnet call for suggestions. Full spec in PLAN.md Phase 17B. | Phase 17B |
 
 ### Known Technical Debt (Acceptable for v1.0)
 - `USE_MOCK_DATA` flag is a dev shortcut — clean up mock routes before v1.5
