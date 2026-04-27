@@ -1934,10 +1934,17 @@ Phase 21      Phase 22
 
 ## 🔄 How to Start a Dev Session
 
+### Prerequisites (first-time Windows setup)
+Redis is NOT installed by default on Windows. Install once:
+```powershell
+winget install Redis.Redis   # installs to C:\Program Files\Redis\
+```
+
 ### Start Redis + FastAPI + Celery
 ```powershell
-# Terminal 1 — Redis
-Start-Service Redis   # or: redis-server
+# Terminal 1 — Redis (must start manually each session)
+& "C:\Program Files\Redis\redis-server.exe" --port 6379
+# Verify: & "C:\Program Files\Redis\redis-cli.exe" ping  → should return PONG
 
 # Terminal 2 — FastAPI
 cd "E:\Claude Projects\Apex\backend"
@@ -1946,7 +1953,15 @@ C:\Python314\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 # Terminal 3 — Celery worker (Windows-safe threads pool)
 cd "E:\Claude Projects\Apex\backend"
 C:\Python314\python.exe -m celery -A app.core.celery_app worker -Q high,default,low --loglevel=info --pool=threads --concurrency=4 --logfile=celery_worker.log
+
+# Terminal 4 — Frontend
+cd "E:\Claude Projects\Apex\frontend"
+npm run dev
 ```
+
+**Quick health check after starting:**
+- Backend: `curl http://localhost:8000/api/v1/health` → `{"status":"ok"}`
+- Frontend: `http://localhost:3000`
 
 ### Get a JWT token
 ```powershell
@@ -1956,7 +1971,23 @@ curl.exe -s -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: ap
 # Copy the access_token from the response
 ```
 
-### Current DB State (as of 2026-04-23)
+### ⚠️ Existing DB installs: run migrations once
+If your Supabase DB was created before 2026-04-27, run this once to apply missed migrations:
+```powershell
+cd "E:\Claude Projects\Apex\backend"
+C:\Python314\python.exe scripts/apply_migrations.py
+```
+This adds: `user_documents` table, `approach_angle` rename, Phase 15 `career_profiles` columns,
+`intended_effect` on `actions`, `channel` on `outreach_emails`, `real_postings` on `opportunities`.
+
+### Creating a fresh test user (recommended for QA)
+The main account (`swapneet.lahoti@gmail.com`) has 1,446 signals + existing data — not ideal for
+observing a clean first-run flow. Create a test user:
+1. Go to Supabase dashboard → Authentication → Users → Add user
+2. Set email + password, confirm email
+3. The user gets a blank profile — perfect for testing the full happy path
+
+### Current DB State (as of 2026-04-27)
 | Metric | Value |
 |--------|-------|
 | Total signals in DB | 1,446 |
@@ -1964,6 +1995,7 @@ curl.exe -s -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: ap
 | Signals with embeddings | ~280 (those that passed relevance gate) |
 | Opportunities | Predicted (Opportunity Predictor ran) |
 | Actions | Generated (Action Generator ran) |
+| DB migrations applied | 001–019 (all current as of 2026-04-27) |
 | `.gitignore` | Added login.json, ingest.json, celerybeat-schedule* exclusions |
 
 ---

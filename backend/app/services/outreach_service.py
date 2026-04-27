@@ -34,7 +34,57 @@ class OutreachService:
         """
         if self.use_mock:
             return self._mock_list(status=status)
-        raise NotImplementedError("Live DB not yet wired")
+        return await self._live_list(status=status)
+
+    async def _live_list(self, status: str | None) -> dict:
+        import asyncpg
+        import uuid as _uuid
+        from app.db.session import get_asyncpg_db_url
+
+        conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+        try:
+            conditions = ["user_id = $1"]
+            args: list = [_uuid.UUID(self.user_id)]
+            if status == "draft":
+                conditions.append("sent_at IS NULL")
+            elif status == "sent":
+                conditions.append("sent_at IS NOT NULL AND replied_at IS NULL")
+            elif status == "replied":
+                conditions.append("replied_at IS NOT NULL")
+
+            where = " AND ".join(conditions)
+            rows = await conn.fetch(
+                f"""SELECT id, user_id, action_id, contact_id, subject, body, tone,
+                           draft_json, channel, sent_at, gmail_message_id,
+                           opened_at, replied_at, reply_detected_at, created_at
+                    FROM outreach_emails
+                    WHERE {where}
+                    ORDER BY created_at DESC""",
+                *args,
+            )
+            items = [
+                {
+                    "id": str(r["id"]),
+                    "user_id": str(r["user_id"]),
+                    "action_id": str(r["action_id"]) if r["action_id"] else None,
+                    "contact_id": str(r["contact_id"]) if r["contact_id"] else None,
+                    "subject": r["subject"],
+                    "body": r["body"],
+                    "tone": r["tone"],
+                    "draft_json": r["draft_json"] or {},
+                    "channel": r["channel"] or "EMAIL",
+                    "sent_at": r["sent_at"].isoformat() if r["sent_at"] else None,
+                    "gmail_message_id": r["gmail_message_id"],
+                    "opened_at": r["opened_at"].isoformat() if r["opened_at"] else None,
+                    "replied_at": r["replied_at"].isoformat() if r["replied_at"] else None,
+                    "reply_detected_at": r["reply_detected_at"].isoformat() if r["reply_detected_at"] else None,
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                }
+                for r in rows
+            ]
+            return {"emails": items, "total": len(items)}
+        finally:
+            await conn.close()
 
     def _mock_list(self, status: str | None) -> dict:
         data = load_mock("outreach.json")
@@ -76,6 +126,7 @@ class OutreachService:
                 "body": body,
                 "tone": tone.upper(),
                 "draft_json": draft_json,
+                "channel": "EMAIL",
                 "sent_at": None,
                 "gmail_message_id": None,
                 "opened_at": None,
@@ -83,7 +134,7 @@ class OutreachService:
                 "reply_detected_at": None,
                 "created_at": "2026-04-13T10:00:00Z",
             }
-        raise NotImplementedError("Live DB not yet wired")
+        return await self._live_create_draft(action_id, contact_id, subject, body, tone, draft_json)
 
     # ── Send ──────────────────────────────────────────────────────────────────
 
@@ -107,7 +158,98 @@ class OutreachService:
                 error="Outreach email not found",
                 code="OUTREACH_NOT_FOUND",
             )
-        raise NotImplementedError("Live DB not yet wired")
+        return await self._live_send_email(outreach_id)
+
+    async def _live_create_draft(
+        self,
+        action_id: str,
+        contact_id: str,
+        subject: str,
+        body: str,
+        tone: str,
+        draft_json: dict | None,
+    ) -> dict:
+        import asyncpg
+        import uuid as _uuid
+        from app.db.session import get_asyncpg_db_url
+
+        doc_id = _uuid.uuid4()
+        conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+        try:
+            await conn.execute(
+                """INSERT INTO outreach_emails
+                   (id, user_id, action_id, contact_id, subject, body, tone, draft_json, channel)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'EMAIL')""",
+                doc_id,
+                _uuid.UUID(self.user_id),
+                _uuid.UUID(action_id) if action_id else None,
+                _uuid.UUID(contact_id) if contact_id else None,
+                subject,
+                body,
+                tone.upper(),
+                draft_json or {},
+            )
+        finally:
+            await conn.close()
+
+        return {
+            "id": str(doc_id),
+            "user_id": self.user_id,
+            "action_id": action_id,
+            "contact_id": contact_id,
+            "subject": subject,
+            "body": body,
+            "tone": tone.upper(),
+            "draft_json": draft_json or {},
+            "channel": "EMAIL",
+            "sent_at": None,
+            "gmail_message_id": None,
+            "opened_at": None,
+            "replied_at": None,
+            "reply_detected_at": None,
+        }
+
+    async def _live_send_email(self, outreach_id: str) -> dict:
+        import asyncpg
+        import uuid as _uuid
+        from datetime import datetime, timezone
+        from app.db.session import get_asyncpg_db_url
+        from app.integrations.gmail_client import GmailClient
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        conn = await asyncpg.connect(get_asyncpg_db_url(), statement_cache_size=0)
+        try:
+            row = await conn.fetchrow(
+                "SELECT * FROM outreach_emails WHERE id = $1 AND user_id = $2",
+                _uuid.UUID(outreach_id),
+                _uuid.UUID(self.user_id),
+            )
+            if not row:
+                raise ApexHTTPException(404, "Outreach email not found", code="OUTREACH_NOT_FOUND")
+
+            client = GmailClient(settings=settings)
+            msg_id = await client.send_email(
+                user_id=self.user_id,
+                to_email=row["contact_email"] if "contact_email" in row.keys() else "",
+                subject=row["subject"] or "",
+                body=row["body"] or "",
+            )
+
+            sent_at = datetime.now(timezone.utc)
+            await conn.execute(
+                "UPDATE outreach_emails SET sent_at = $1, gmail_message_id = $2 WHERE id = $3",
+                sent_at,
+                msg_id,
+                _uuid.UUID(outreach_id),
+            )
+            return {
+                "id": outreach_id,
+                "sent_at": sent_at.isoformat(),
+                "gmail_message_id": msg_id,
+            }
+        finally:
+            await conn.close()
 
     # ── Gmail OAuth ───────────────────────────────────────────────────────────
 

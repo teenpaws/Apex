@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
+> Last updated: 2026-04-27 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
 > Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
@@ -558,7 +558,7 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 - No structured logging format yet — add OpenTelemetry spans in v1.5
 - No API versioning strategy beyond `/v1/` — define `/v2/` migration plan before v1.5
 - `preferences_json` on users table is a grab-bag — normalize into proper columns in v1.5
-- `positioning_notes` column name in DB (legacy) — rename to `approach_angle` was planned for Phase 14 but not executed (migration not added); defer to Phase 15
+- ~~`positioning_notes` rename~~ — completed 2026-04-27 via `apply_migrations.py` migration 017
 
 ---
 
@@ -628,6 +628,12 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-26 | Cover letter narrative selection: substring match on `target_context` | Both Positioning Advisor and Email Drafter need the most relevant cover letter for a given opportunity. Implemented as a shared `_select_cover_letter_narrative()` helper: case-insensitive substring check of each narrative's `target_context` against the opportunity context string; falls back to first entry if no match. |
 | 2026-04-26 | Agent prompts V2 shipped — all 8 prompts rewritten | V1 prompts predated Phase 14/15 enrichments and used loose prose structure. V2 applies Anthropic prompting best practices: XML-tagged sections (`<role>`, `<inputs_you_receive>`, `<reasoning_steps>`, `<output_schema>`, `<final_rules>`), explicit chain-of-thought reasoning steps, anchor anti-pattern callouts (`✗ Bad / ✓ Good`), and full use of Phase 14/15 fields — `seniority_band`, `years_of_experience`, `work_history`, `key_achievements`, `cover_letter_narratives`. New requirements baked in: opportunity_predictor cites signal_id + ≤15-word key_quote per signal; career_fit_scorer must reference 2+ dimensions by name AND cite a specific work_history entry or key_achievement; positioning_advisor and email_drafter must cite at least one specific key_achievement; action_generator outputs required `intended_effect` (Phase 16 ready); profile_extractor uses whole-word seniority detection. Registry + 8 agent `.py` files updated to load `_v2.txt`. V1 files retained on disk for diff/rollback. |
 | 2026-04-26 | Direct commit to master for V2 prompt swap (exception to phase-branch rule) | CLAUDE.md §12 mandates `phase/{N}-{name}` branches via PR for all work. V2 prompt swap is a horizontal upgrade across all 8 agents — does not belong to any single phase, and gating it behind a Phase 16 branch would delay benefits to every running agent. User explicitly authorised direct commit. Future horizontal upgrades (e.g. v3 prompt-builder layer) should follow the same pattern only with explicit authorisation. |
+| 2026-04-27 | DB migrations 014–017 were never applied to the live Supabase instance | schema/initial.sql had all migrations correctly but they were never executed against the existing DB. Caused: `user_documents` table missing (500 on upload), `approach_angle` column missing (500 on opportunities list), Phase 15 `career_profiles` columns missing. Fix: `backend/scripts/apply_migrations.py` — run this once against any existing DB that was created before 2026-04-27. New installs using `schema/initial.sql` are unaffected. |
+| 2026-04-27 | `OutreachService` live DB implemented — `list_outreach`, `create_draft`, `send_email` | All three methods had `raise NotImplementedError("Live DB not yet wired")` stubs from Phase 9. Implemented: `_live_list` (SELECT from outreach_emails with status filter), `_live_create_draft` (INSERT into outreach_emails), `_live_send_email` (UPDATE sent_at + gmail_message_id via GmailClient). |
+| 2026-04-27 | Redis not installed on Windows dev machine — install via winget | `winget install Redis.Redis` installs Redis 3.0.504 to `C:\Program Files\Redis\`. Start with `redis-server.exe --port 6379`. Not registered as a Windows service by default — must be started manually each session (or run `redis-server --service-install` once). |
+| 2026-04-27 | `intended_effect` column added to `actions`; `channel` column added to `outreach_emails` | Both were in CLAUDE.md data model spec but missing from the actual DB. Added via `apply_migrations.py` steps 018 and 019. `channel` defaults to `'EMAIL'`, CHECK constraint `IN ('EMAIL', 'LINKEDIN')`. |
+| 2026-04-27 | Fresh test user recommended for happy-path QA | Existing user (`swapneet.lahoti@gmail.com`) has 1,446 signals, classified data, and existing opportunities — makes it hard to observe a clean first-run flow. Create a separate test account via Supabase Auth dashboard for end-to-end walkthroughs. |
+| 2026-04-27 | Direct commit to master for DB migration fixes (exception to phase-branch rule) | Same rationale as V2 prompt swap: cross-cutting infrastructure fix that unblocks every feature. User explicitly authorised. |
 
 ---
 
