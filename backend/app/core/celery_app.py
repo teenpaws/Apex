@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.workers.generate_actions",
         "app.workers.enrich_contacts",
         "app.workers.extract_profile",
+        "app.workers.run_pipeline",
     ],
 )
 

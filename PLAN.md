@@ -1496,6 +1496,75 @@ Update all agent input schemas and prompts to consume the new profile fields:
 
 ---
 
+## Phase 17B: Target Company Intelligence
+
+**Goal:** Users can curate their own list of target companies in the Profile page. A new "Target Companies" section lets users add companies manually or via AI-powered "Find Similar" recommendations based on their profile and existing target list.
+
+**Status:** 🔲 NOT STARTED
+
+**Prerequisite:** Phase 15 complete (career profile extraction gives the profile context needed for AI similarity matching).
+
+---
+
+### Sprint 17B.1 — Target Companies Backend
+
+**Schema change:**
+- Add `target_company_ids uuid[]` to `career_profiles` — list of company UUIDs the user has explicitly targeted
+- Add `POST /profile/target-companies` — add a company (by name or ID)
+- Add `DELETE /profile/target-companies/{company_id}` — remove a company
+- Add `GET /profile/target-companies` — list with company details (name, industry, domain, enrichment status)
+- When a company is added: upsert into `companies` table, then ensure it's in the next pipeline run's company scope
+
+**Pipeline scope change:**
+- `ingest_signals.py`: prioritize `target_company_ids` companies in signal ingestion (run them first, always include them)
+- Ensure target companies are included in `_fetch_companies_with_relevant_signals` even if they have <3 signals
+
+**Tests:**
+- Unit: target company upsert creates company row + updates career_profile.target_company_ids
+- Integration: pipeline includes explicitly targeted company even with 0 signals
+
+---
+
+### Sprint 17B.2 — Target Companies Frontend
+
+**Profile page — new "Target Companies" section:**
+- Display current target companies as cards (company name, industry, signal count)
+- Search field: type company name → debounced search against `GET /companies?q=name` (existing endpoint)
+- "Add" button → calls `POST /profile/target-companies`
+- Remove button on each card → calls `DELETE /profile/target-companies/{id}`
+- Empty state: "Add companies you want to work at — they'll be prioritized in your pipeline"
+
+**Tests:**
+- Unit: `TargetCompanyCard` renders with name + signal count + remove button
+- Integration: add flow shows company in list; remove flow removes it
+
+---
+
+### Sprint 17B.3 — AI "Find Similar Companies" Feature
+
+**UI:** "Find 10 More Like These" button appears when user has ≥1 target company. Calls:
+- `POST /profile/target-companies/suggest` → returns `[{name, domain, industry, why_similar}]`
+
+**Backend — new endpoint:**
+- Reads user's current target companies + career profile
+- Calls Claude Sonnet with: user profile (seniority, industries, aspirations, target role types) + current company names + industries
+- Claude outputs 10 company suggestions with: `name`, `domain`, `industry`, `why_similar` (1 sentence)
+- Returns suggestions as a list — user sees each with a ✓ (add) / ✗ (skip) toggle
+- On confirm: calls `POST /profile/target-companies` for each approved suggestion
+
+**Agent:** No new agent needed — inline Claude call from the endpoint (not a Celery task; ~2s response acceptable)
+
+**Constraints:**
+- Suggestions must not include companies already in target list
+- Suggestions must be real companies (Claude instructed to only name verifiable companies)
+- No hallucinated domains — domain field is optional; verification is downstream task
+
+**Tests:**
+- Unit: suggestion response schema validation (name, industry, why_similar required)
+- Integration: mock Claude call returns 10 suggestions; endpoint returns them correctly
+
+---
+
 ## Phase 18: Signal Quality & Entity Disambiguation
 
 **Goal:** Reduce signal noise by ensuring search queries are company-specific and pre-filter checks entity context before classifying. Eliminate "Usain Bolt wins race" type noise.
@@ -1837,6 +1906,7 @@ Before passing a signal to the classifier, check that the signal is actually abo
 | 15 | 🔲 Not Started | 0/4 | Resume & Document Intelligence: upload, Profile Extractor Agent, seniority gate |
 | 16 | 🔲 Not Started | 0/3 | Action Page Revamp: enriched context, company filter, intended_effect |
 | 17 | 🔲 Not Started | 0/3 | Outreach Expansion: LinkedIn message gen + channel routing |
+| 17B | 🔲 Not Started | 0/3 | Target Company Intelligence: profile target list, AI "Find Similar" recommendations |
 | 18 | 🔲 Not Started | 0/2 | Signal Disambiguation: domain-qualified queries, pre-filter entity check |
 | 19 | 🔲 Not Started | 0/3 | Analytics real data + historical backtesting |
 | 20 | 🔲 Not Started | 0/2 | Self-Host Foundations: consolidated `initial.sql`, owner-bootstrap script, hardcode/config audit |
@@ -1899,8 +1969,12 @@ Phase 15        Phase 16          Phase 17
 (Resume &      (Action Page      (Outreach
  Document       Revamp)           Expansion /
  Intelligence)                    LinkedIn)
-     │              │
-     └──────┬────────┘
+     │              │                  │
+     └──────┬────────┘                 │
+            ↓                          │
+     Phase 17B (Target Company ←───────┘
+      Intelligence: profile
+      target list + AI similar)
             ↓
        Phase 18 (Signal Disambiguation)
             ↓
@@ -1923,6 +1997,7 @@ Phase 21      Phase 22
 ```
 
 > Phases 15, 16, 17 are independent of each other and can run in parallel.
+> Phase 17B depends on Phase 15 (profile extraction) and can run after Phase 17.
 > Phase 18 requires Phase 14.1 (keyword pre-filter) as its foundation.
 > Phase 19 requires Phase 14.2 (Adzuna) for the backtesting sprint.
 > Phase 20 is the foundation for all multi-user self-host work.

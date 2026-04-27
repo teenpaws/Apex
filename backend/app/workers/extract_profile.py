@@ -116,11 +116,16 @@ async def _run_extraction(user_id: str, settings) -> dict:
 
         staging = output.model_dump(mode="json")
 
-        # Write staging JSON to career_profiles
+        # Write staging JSON to career_profiles (UPSERT — row may not exist yet
+        # if the user hasn't filled out the manual profile form)
         await conn.execute(
-            """UPDATE career_profiles
-               SET extraction_staging_json = $1, raw_resume_text = $2
-               WHERE user_id = $3""",
+            """INSERT INTO career_profiles
+                 (user_id, extraction_staging_json, raw_resume_text)
+               VALUES ($3, $1, $2)
+               ON CONFLICT (user_id) DO UPDATE SET
+                 extraction_staging_json = EXCLUDED.extraction_staging_json,
+                 raw_resume_text         = EXCLUDED.raw_resume_text,
+                 updated_at              = NOW()""",
             json.dumps(staging),
             resume_text or None,
             _uuid.UUID(user_id),

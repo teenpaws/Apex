@@ -108,7 +108,11 @@ async def _update_signal_classification(
     signal_type: str,
     relevance_score: float,
 ) -> None:
-    """Write classification result back to the signals table."""
+    """Write classification result back to the signals table.
+
+    Single-signal helper. Opens a new connection per call — slow when used in
+    a loop. For batches use :func:`_bulk_update_signal_classifications` instead.
+    """
     import asyncpg  # noqa: PLC0415
     from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
 
@@ -132,6 +136,131 @@ async def _update_signal_classification(
             "DB updated: signal %s → type=%s relevance=%.2f",
             signal_id, signal_type, relevance_score,
         )
+    finally:
+        await conn.close()
+
+
+async def _bulk_load_signals_from_db(signal_ids: list[str]) -> list[dict[str, Any]]:
+    """Load many signals + their company name + the user's profile in 2 round-trips.
+
+    Replaces the per-signal loop that was opening 50 connections per batch.
+    Assumes all signal_ids belong to the same user (true under the v1.0
+    pipeline since each batch is a slice of one user's unprocessed signals).
+    """
+    if not signal_ids:
+        return []
+
+    import asyncpg  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    uuids = [uuid.UUID(sid) for sid in signal_ids]
+
+    db_url = get_asyncpg_db_url()
+    conn = await asyncpg.connect(db_url, statement_cache_size=0)
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT s.id, s.user_id, s.title, s.description, s.source, s.signal_date,
+                   c.name AS company_name
+            FROM signals s
+            LEFT JOIN companies c ON c.id = s.company_id
+            WHERE s.id = ANY($1)
+            """,
+            uuids,
+        )
+        if not rows:
+            return []
+
+        # All signals share one user_id under v1.0 — fetch the profile once.
+        user_id = rows[0]["user_id"]
+        profile = await conn.fetchrow(
+            """
+            SELECT target_roles, industries, seniority_band, work_history_json
+            FROM career_profiles
+            WHERE user_id = $1
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 1
+            """,
+            user_id,
+        )
+    finally:
+        await conn.close()
+
+    target_roles: list[str] = list(profile["target_roles"]) if profile else []
+    industries: list[str] = list(profile["industries"]) if profile else []
+    seniority_band = profile["seniority_band"] if profile else None
+
+    work_history_companies: list[str] = []
+    if profile and profile["work_history_json"]:
+        wh = (
+            _json.loads(profile["work_history_json"])
+            if isinstance(profile["work_history_json"], str)
+            else profile["work_history_json"]
+        )
+        work_history_companies = [
+            entry.get("company", "")
+            for entry in (wh or [])
+            if entry.get("company")
+        ][:5]
+
+    return [
+        {
+            "id": str(r["id"]),
+            "user_id": str(r["user_id"]),
+            "title": r["title"] or "",
+            "description": r["description"] or "",
+            "source": r["source"] or "",
+            "signal_date": (
+                r["signal_date"].isoformat()
+                if r["signal_date"]
+                else datetime.now(timezone.utc).isoformat()
+            ),
+            "company_name": r["company_name"] or "",
+            "user_target_industries": industries,
+            "user_target_roles": target_roles,
+            "user_seniority_band": seniority_band,
+            "user_work_history_companies": work_history_companies,
+        }
+        for r in rows
+    ]
+
+
+async def _bulk_update_signal_classifications(
+    updates: list[tuple[str, str, float]],
+) -> None:
+    """Write many classification results in one DB connection.
+
+    `updates` is a list of (signal_id, signal_type, relevance_score) tuples.
+    Each Supabase pooler connect costs ~1.5s, so amortising across a batch
+    of 50 signals turns 75s of overhead into ~1.5s.
+    """
+    if not updates:
+        return
+
+    import asyncpg  # noqa: PLC0415
+    from app.db.session import get_asyncpg_db_url  # noqa: PLC0415
+
+    now = datetime.now(timezone.utc)
+    rows = [
+        (signal_type, relevance_score, now, uuid.UUID(signal_id))
+        for signal_id, signal_type, relevance_score in updates
+    ]
+
+    db_url = get_asyncpg_db_url()
+    conn = await asyncpg.connect(db_url, statement_cache_size=0)
+    try:
+        await conn.executemany(
+            """
+            UPDATE signals
+            SET type = $1,
+                relevance_score = $2,
+                processed_at = $3
+            WHERE id = $4
+            """,
+            rows,
+        )
+        logger.info("DB bulk update: %d signals classified", len(rows))
     finally:
         await conn.close()
 
@@ -495,12 +624,14 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict[str, Any
         if settings.USE_MOCK_DATA:
             raw_signals = [_load_mock_signal(sid) for sid in ids]
         else:
-            raw_signals = []
-            for sid in ids:
-                try:
-                    raw_signals.append(await _load_signal_from_db(sid))
-                except ValueError:
-                    logger.warning("Signal not found, skipping: %s", sid)
+            # Bulk load: 2 DB round-trips for the entire batch instead of
+            # one connection per signal (was the actual bottleneck — pre-fix
+            # this loop took ~75s of pure connect overhead for a 50-signal batch).
+            raw_signals = await _bulk_load_signals_from_db(ids)
+            if len(raw_signals) < len(ids):
+                logger.warning(
+                    "Bulk load: %d/%d signals found in DB", len(raw_signals), len(ids)
+                )
 
         if not raw_signals:
             return {"total": 0, "pre_filtered": 0, "classified": 0, "failed": 0}
@@ -513,6 +644,11 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict[str, Any
             target_roles=first.get("user_target_roles", []),
             tracked_companies=[],
         )
+
+        # Collect ALL DB writes in one list so we flush them with a single
+        # connection at the end of the batch (each Supabase pooler connect
+        # costs ~1.5s, so per-signal connections were the actual bottleneck).
+        pending_updates: list[tuple[str, str, float]] = []
 
         to_classify = []
         pre_filtered_count = 0
@@ -527,7 +663,7 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict[str, Any
                 if settings.USE_MOCK_DATA:
                     _mock_update_signal(sig["id"], "UNKNOWN", 0.05)
                 else:
-                    await _update_signal_classification(sig["id"], "UNKNOWN", 0.05)
+                    pending_updates.append((sig["id"], "UNKNOWN", 0.05))
             else:
                 to_classify.append(sig)
 
@@ -567,13 +703,18 @@ def batch_classify_signals_upgrade(self, signal_ids: list[str]) -> dict[str, Any
                     if settings.USE_MOCK_DATA:
                         _mock_update_signal(result.signal_id, result.signal_type, result.relevance_score)
                     else:
-                        await _update_signal_classification(
-                            result.signal_id, result.signal_type, result.relevance_score
+                        pending_updates.append(
+                            (result.signal_id, result.signal_type, result.relevance_score)
                         )
                     classified_count += 1
             except Exception as exc:
                 logger.error("Batch classify chunk failed: %s", exc, exc_info=True)
                 failed_count += len(chunk)
+
+        # Single bulk DB write for all (pre_filtered + classified) signals
+        # in this task call — one connection, one round-trip with executemany.
+        if not settings.USE_MOCK_DATA and pending_updates:
+            await _bulk_update_signal_classifications(pending_updates)
 
         return {
             "total": len(raw_signals),

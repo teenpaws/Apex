@@ -76,39 +76,45 @@ class ProfileService:
         import uuid
         from app.db.session import get_asyncpg_db_url
 
-        allowed = {'"current_role"', 'target_roles', 'industries', 'aspirations_text'}
-        set_parts = []
-        args: list = []
-        idx = 1
-
-        # Map from API field name to DB column
+        # Map from API field name to (DB column, default for INSERT path)
         field_map = {
-            'current_role': '"current_role"',
-            'target_roles': 'target_roles',
-            'industries': 'industries',
-            'aspirations_text': 'aspirations_text',
+            'current_role':     ('"current_role"',  None),
+            'target_roles':     ('target_roles',    []),
+            'industries':       ('industries',      []),
+            'aspirations_text': ('aspirations_text', None),
         }
 
-        for key, val in updates.items():
-            if key in field_map and val is not None:
-                set_parts.append(f'{field_map[key]} = ${idx}')
-                args.append(val)
-                idx += 1
-
-        if not set_parts:
+        provided = {k: v for k, v in updates.items() if k in field_map and v is not None}
+        if not provided:
             return await self._live_get()
-
-        set_parts.append(f'updated_at = NOW()')
 
         db_url = get_asyncpg_db_url()
         conn = await asyncpg.connect(db_url, statement_cache_size=0)
         try:
-            args.append(uuid.UUID(self.user_id))
-            await conn.execute(
-                f'''UPDATE career_profiles SET {', '.join(set_parts)}
-                    WHERE user_id = ${idx}''',
-                *args
+            # UPSERT: insert if no row exists for this user, otherwise update.
+            # Requires UNIQUE index on career_profiles(user_id).
+            cols = ['user_id']
+            placeholders = ['$1']
+            args: list = [uuid.UUID(self.user_id)]
+            update_assignments = []
+            idx = 2
+
+            for key, val in provided.items():
+                col, _default = field_map[key]
+                cols.append(col)
+                placeholders.append(f'${idx}')
+                args.append(val)
+                update_assignments.append(f'{col} = EXCLUDED.{col.strip(chr(34))}')
+                idx += 1
+
+            update_assignments.append('updated_at = NOW()')
+
+            sql = (
+                f'INSERT INTO career_profiles ({", ".join(cols)}) '
+                f'VALUES ({", ".join(placeholders)}) '
+                f'ON CONFLICT (user_id) DO UPDATE SET {", ".join(update_assignments)}'
             )
+            await conn.execute(sql, *args)
             return await self._live_get()
         finally:
             await conn.close()

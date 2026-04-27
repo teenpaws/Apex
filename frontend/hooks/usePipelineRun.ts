@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import axios from 'axios';
+import { agentsApi } from '@/lib/api';
 
 interface PipelineRunState {
   runId: string | null;
@@ -14,15 +16,16 @@ export function usePipelineRun() {
   const startPipeline = useCallback(async () => {
     setState({ runId: null, isRunning: true, error: null });
     try {
-      const res = await fetch('/api/v1/agents/pipeline/run', { method: 'POST', credentials: 'include' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(err.detail ?? `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setState({ runId: data.run_id, isRunning: true, error: null });
+      const res = await agentsApi.runPipeline();
+      setState({ runId: res.data.run_id, isRunning: true, error: null });
     } catch (err) {
-      setState({ runId: null, isRunning: false, error: err instanceof Error ? err.message : 'Failed to start pipeline' });
+      let msg = 'Failed to start pipeline';
+      if (axios.isAxiosError(err)) {
+        msg = err.response?.data?.error ?? err.response?.data?.detail ?? err.message;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setState({ runId: null, isRunning: false, error: msg });
     }
   }, []);
 

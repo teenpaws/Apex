@@ -75,6 +75,10 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Treat empty env vars (e.g. ANTHROPIC_API_KEY="" injected by parent
+        # tooling like Claude Code's OAuth flow) as unset, so values from the
+        # .env file are used instead of being silently overridden.
+        env_ignore_empty=True,
     )
 
 

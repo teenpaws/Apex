@@ -102,13 +102,14 @@ async def trigger_pipeline_run(
             message="Mock pipeline run started (USE_MOCK_DATA=true)",
         )
 
-    from app.workers.ingest_signals import ingest_all_sources  # noqa: PLC0415
-    task = ingest_all_sources.delay(user_id=current_user["id"])
+    # Full orchestrator: ingest -> classify -> predict (-> fit -> actions, chained)
+    from app.workers.run_pipeline import run_full_pipeline  # noqa: PLC0415
+    task = run_full_pipeline.delay(user_id=current_user["id"])
     run_id = str(task.id)
     return PipelineRunResponse(
         run_id=run_id,
         status="queued",
-        message="Pipeline run queued — poll /agents/run-status/{run_id} for progress",
+        message="Full pipeline queued — ingest, classify, predict, fit-score, actions",
     )
 
 

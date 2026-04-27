@@ -86,6 +86,7 @@ export const agentsApi = {
   runStatus: (runId: string) =>
     apiClient.get(`/agents/run-status/${runId}`),
   runs: () => apiClient.get('/agents/runs'),
+  runPipeline: () => apiClient.post('/agents/pipeline/run'),
 };
 
 export const analyticsApi = {
