@@ -2,7 +2,7 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
+> Last updated: 2026-04-27 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
 > Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
 
 ---
@@ -374,6 +374,10 @@ Speculative: "bg-muted text-muted-foreground border-border"
 | POST | `/profile/documents` | Upload resume or cover letter (multipart/form-data) → returns `{doc_id}` (Phase 15) |
 | DELETE | `/profile/documents/{id}` | Remove document + clear extracted contribution (Phase 15) |
 | POST | `/profile/documents/{id}/approve` | Accept extracted fields into career profile (Phase 15) |
+| GET | `/profile/target-companies` | List user's target companies with signal counts (Phase 17B) |
+| POST | `/profile/target-companies` | Add a company to target list by name or ID (Phase 17B) |
+| DELETE | `/profile/target-companies/{company_id}` | Remove a company from target list (Phase 17B) |
+| POST | `/profile/target-companies/suggest` | AI "Find 10 More Like These" — returns `[{name, domain, industry, why_similar}]` (Phase 17B) |
 | GET | `/companies/{id}` | Company detail + signals + opportunities |
 | GET | `/contacts` | User's saved contacts (incl. linkedin_url from PDL) |
 | POST | `/contacts/search` | Search PDL by company + title keywords |
@@ -551,6 +555,7 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | Historical backtesting (predict from past signals, validate against actuals) | Requires Adzuna job board integration (Phase 14) as prerequisite. Post-MVP validation tool. | Phase 19 |
 | Resume/cover letter generation feature | Enabled by Phase 15 Profile Extractor (structured work_history + achievements). Generate tailored 1-page resume or cover letter for a specific opportunity. | Phase 20 |
 | Profile extraction approval UX: switch from user-approval to auto-overwrite | Currently user must approve extracted fields (Option B — safer for v1.0). At v1.5 with multiple users, consider auto-overwrite for first upload + diff-based approval for subsequent uploads. Configurable via `PROFILE_EXTRACTION_MODE` env var. | v1.5 |
+| Target Company Intelligence (Phase 17B) | Users manually add target companies in Profile page + AI "Find Similar" button suggests 10 more based on profile + existing targets. Approved companies seed the pipeline. Requires `target_company_ids uuid[]` on `career_profiles` + 3 new profile endpoints + inline Sonnet call for suggestions. Full spec in PLAN.md Phase 17B. | Phase 17B |
 
 ### Known Technical Debt (Acceptable for v1.0)
 - `USE_MOCK_DATA` flag is a dev shortcut — clean up mock routes before v1.5
@@ -628,6 +633,11 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-26 | Cover letter narrative selection: substring match on `target_context` | Both Positioning Advisor and Email Drafter need the most relevant cover letter for a given opportunity. Implemented as a shared `_select_cover_letter_narrative()` helper: case-insensitive substring check of each narrative's `target_context` against the opportunity context string; falls back to first entry if no match. |
 | 2026-04-26 | Agent prompts V2 shipped — all 8 prompts rewritten | V1 prompts predated Phase 14/15 enrichments and used loose prose structure. V2 applies Anthropic prompting best practices: XML-tagged sections (`<role>`, `<inputs_you_receive>`, `<reasoning_steps>`, `<output_schema>`, `<final_rules>`), explicit chain-of-thought reasoning steps, anchor anti-pattern callouts (`✗ Bad / ✓ Good`), and full use of Phase 14/15 fields — `seniority_band`, `years_of_experience`, `work_history`, `key_achievements`, `cover_letter_narratives`. New requirements baked in: opportunity_predictor cites signal_id + ≤15-word key_quote per signal; career_fit_scorer must reference 2+ dimensions by name AND cite a specific work_history entry or key_achievement; positioning_advisor and email_drafter must cite at least one specific key_achievement; action_generator outputs required `intended_effect` (Phase 16 ready); profile_extractor uses whole-word seniority detection. Registry + 8 agent `.py` files updated to load `_v2.txt`. V1 files retained on disk for diff/rollback. |
 | 2026-04-26 | Direct commit to master for V2 prompt swap (exception to phase-branch rule) | CLAUDE.md §12 mandates `phase/{N}-{name}` branches via PR for all work. V2 prompt swap is a horizontal upgrade across all 8 agents — does not belong to any single phase, and gating it behind a Phase 16 branch would delay benefits to every running agent. User explicitly authorised direct commit. Future horizontal upgrades (e.g. v3 prompt-builder layer) should follow the same pattern only with explicit authorisation. |
+| 2026-04-27 | Target Company Intelligence added as Phase 17B | Users need control over which companies the pipeline focuses on. Current seeding (15 hardcoded companies) is inflexible. Phase 17B adds: (1) manual target company list in Profile page; (2) AI "Find 10 More Like These" endpoint (inline Sonnet call, no new agent); (3) approved companies seed pipeline ingestion with priority. `target_company_ids uuid[]` added to `career_profiles`. Full spec in PLAN.md Phase 17B. |
+| 2026-04-27 | `env_ignore_empty=True` added to pydantic-settings SettingsConfigDict | Claude Code OAuth mode injects empty `ANTHROPIC_API_KEY=''` into subprocess environment, silently overriding `.env` values. `env_ignore_empty=True` causes pydantic-settings to ignore empty string overrides, preserving `.env` values. |
+| 2026-04-27 | `run_full_pipeline` Celery orchestrator replaces fragmented pipeline trigger | POST `/agents/pipeline/run` previously only triggered ingest, not classify/predict/actions. Replaced with single `run_full_pipeline` task that chains all stages sequentially with Redis progress markers. |
+| 2026-04-27 | Bulk DB load + write in classify_signals.py (replaces per-signal connections) | Per-signal asyncpg connections cost ~1.5s each. 1,000 signals × 2 directions = ~50 min overhead. Replaced with `_bulk_load_signals_from_db` (single `WHERE id = ANY($1)` query) + `_bulk_update_signal_classifications` (single connection + executemany). Batch of 50 now takes ~30s not ~2.5min. |
+| 2026-04-27 | `career_profiles` UPSERT replaces UPDATE in profile_service.py | Plain `UPDATE` silently no-ops if row doesn't exist yet. Changed to `INSERT ... ON CONFLICT (user_id) DO UPDATE` so first profile save creates the row. Same fix applied to `extract_profile.py` staging write. |
 
 ---
 
