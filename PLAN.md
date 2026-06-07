@@ -1,8 +1,9 @@
 # PLAN.md — Apex Platform: Full Development Plan
 
 > **Living document.** Update after every session. Mark tasks ✅ when complete.
-> Last updated: 2026-04-26 | Phase 15: COMPLETE ✅ | Next: **Phase 16 — Action Page Revamp**
+> Last updated: 2026-06-07 | Phase 15: COMPLETE ✅ | Next: **Phase 16 — Action Page Revamp**
 > Multi-user self-host distribution (Phases 20–24) planned — see `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
+> **2026-06-07 Strategic Review** — see "Strategic Review Action Backlog" (below) for the prioritized 12-item Master Action List. Two BLOCKERS open: committed credential (now scrubbed from this file) + `agent_runs` write stub. Full findings in CLAUDE.md §16.
 
 ---
 
@@ -1902,8 +1903,8 @@ Before passing a signal to the classifier, check that the signal is actually abo
 | 11 | ✅ Complete | 2/2 | Docker stack, JSON logging, README — 2026-04-21 |
 | 12 | ✅ Complete | 2/2 | Signal ingestion live ✅, ~450 signals classified ✅, Opportunity Predictor + Fit Scorer + Action Generator all run ✅. Full pipeline end-to-end live. |
 | 13 | ✅ Complete | 2/2 | Sprint 13.1 ✅: SEC EDGAR 90-day filter, 0-article logger, Celery ×4. Sprint 13.2 ✅: prompt rewrites (classifier + predictor + fit scorer) — all MBA-specific, grounded, cited |
-| 14 | 🔲 Not Started | 0/4 | Post-MVP: Sonnet batch + pre-filter, job board layer, FE pipeline bar, extended thinking, launch package |
-| 15 | 🔲 Not Started | 0/4 | Resume & Document Intelligence: upload, Profile Extractor Agent, seniority gate |
+| 14 | ✅ Complete | 4/4 | Post-MVP: Sonnet batch + pre-filter, Adzuna job board layer, FE pipeline bar, extended thinking, launch package — done 2026-04-25 (tracker corrected 2026-06-07 by Strategic Review) |
+| 15 | ✅ Complete | 4/4 | Resume & Document Intelligence: upload, Profile Extractor Agent, seniority gate — done 2026-04-26 (tracker corrected 2026-06-07 by Strategic Review) |
 | 16 | 🔲 Not Started | 0/3 | Action Page Revamp: enriched context, company filter, intended_effect |
 | 17 | 🔲 Not Started | 0/3 | Outreach Expansion: LinkedIn message gen + channel routing |
 | 17B | 🔲 Not Started | 0/3 | Target Company Intelligence: profile target list, AI "Find Similar" recommendations |
@@ -1916,6 +1917,74 @@ Before passing a signal to the classifier, check that the signal is actually abo
 | 24 | 🔲 Not Started | 0/2 | Public Launch Polish: README, Issues templates, CI, demo mode, cohort announcement |
 
 **Parallel execution opportunity:** Phases 3–5 (backend) can run in parallel with Phase 6 (frontend), saving ~4–5 sessions. Phases 21 and 22 can run in parallel after Phase 20.
+
+---
+
+## Strategic Review Action Backlog (2026-06-07)
+
+> Output of the 6-agent review board + synthesis (full findings in CLAUDE.md §16). Conflict-resolution
+> hierarchy applied: **Security → Technical correctness → Cost integrity → Product completeness → Strategy.**
+> Items map to existing phases where one exists; standalone items get a `SR-N` id. **BLOCKERS gate all
+> other build work.** Mark ✅ as completed.
+
+### 🔴 This Week — BLOCKERS
+
+- [ ] **SR-1 [P0] Rotate + scrub committed credential.** Rotate the Supabase password; the `Apex2026!`
+  literal has been replaced with a placeholder in this file (done 2026-06-07); scrub it from git history
+  (`git filter-repo`) before the repo is made public. *(Agent 6 B1)*
+  **Done when:** git history contains no credential; password rotated.
+- [ ] **SR-2 [P0] Persist `agent_runs`.** Implement the real asyncpg insert in
+  `backend/app/agents/base_agent.py` `_log_agent_run` (currently a `logger.info` stub, "TODO Phase 2").
+  Must NOT touch agent prompt logic or the pipeline. *(Agents 3+2+6)*
+  **Done when:** every agent invocation inserts a row; `/analytics/costs` returns real numbers;
+  one integration test asserts the insert.
+
+### 🟠 This Month
+
+- [x] **SR-3 [P1] Reconcile docs.** PLAN Progress Tracker corrected (Phases 14/15 = Complete, done
+  2026-06-07). Still to do: relocate root `Index.tsx` (stale Loveable reference — react-router + mock
+  data; the live app is Next.js `frontend/app/(dashboard)/page.tsx`) to `docs/design-reference/` or delete
+  with a CLAUDE.md note. *(Agent 3)*
+- [ ] **SR-4 [P1] = Phase 18** — entity disambiguation (domain-qualified queries + `CompanyContextMatcher`).
+  Highest precision win, zero model cost. Must NOT change classifier prompts beyond the pre-filter. *(Agents 1+2)*
+- [ ] **SR-5 [P1] Migrate extended thinking.** Replace `thinking={"type":"enabled","budget_tokens":N}` in
+  `base_agent._call_claude` with `thinking={"type":"adaptive"}` + `output_config={"effort":"high"}`; delete
+  `thinking_budget` plumbing; fix the wrong docstring at `base_agent.py:120`. *(Agent 2)*
+  **Done when:** no `budget_tokens` in the codebase; predictor runs with adaptive thinking; agent tests pass.
+- [ ] **SR-6 [P1] = Phase 16** — Action page revamp. Consume `intended_effect` (column already migrated,
+  verify Action Generator V2 populates it), add `company_id` filter + opportunity/signal JOINs, and make the
+  enriched action card the dashboard hero ("actions not lists"). *(Agents 3+4)*
+- [ ] **SR-7 [P1] Minimize Gmail OAuth scope.** Drop `gmail.readonly` (Google *restricted* scope → annual
+  CASA for any verified multi-user app) from `gmail_client.py`; use `gmail.send` + `gmail.metadata` for reply
+  detection. Verify Gmail refresh tokens are encrypted at rest in `OutreachService`. *(Agent 6 H1/H2)*
+- [ ] **SR-8 [P2] = Phase 17B + new signal type.** Ship Target Companies (profile target list + AI "Find
+  Similar"), AND add an `AI_TRANSFORMATION` signal type (AI mandates, Chief AI Officer hires, GCC/innovation-hub
+  build-outs) — enum + classifier-prompt change. *(Agents 1+4)*
+
+### 🟢 Next Quarter
+
+- [ ] **SR-9 [P2] = Phase 20+22** — multi-user readiness. Audit every asyncpg query for an explicit `user_id`
+  filter (raw asyncpg over `DATABASE_URL` **bypasses RLS** — `auth.uid()` policies do not apply), add a
+  cross-user isolation integration test (user A cannot read user B's rows), then the `/setup` wizard. Hard gate
+  before any shared-DB cohort; single-tenant self-host is unaffected. *(Agent 6 B2)*
+- [ ] **SR-10 [P3] Opus 4.8 pilot.** A/B Opus 4.8 (`effort:"high"`) vs Sonnet 4.6 on Opportunity Predictor +
+  Career Fit Scorer over the existing 1,446-signal corpus. Only after SR-2 makes cost visible. Registry is
+  already per-agent overridable. *(Agent 2)*
+- [ ] **SR-11 [P3] One-click Approve & Send.** Collapse opportunity → contact → draft → send into a single
+  approve-and-send action (auto-select cover-letter narrative). Add an "AI-generated — verify before sending"
+  disclosure on drafts and predictions (EU AI Act Art. 50 transparency). *(Agent 4 + Agent 6 M1)*
+- [ ] **SR-12 [P3] Cohort compliance.** Privacy policy + GDPR data-deletion path + documented legal basis for
+  PDL/Hunter contact enrichment; pull PII-log-redaction forward from v1.5. Required before 10+ HEC users.
+  *(Agent 6 M2 + Agent 5)*
+
+### Strategy notes (non-build, for direction)
+- **Positioning:** reposition the moat around the *persona-calibrated reasoning layer* (the 3-in-1 gap is
+  closing) — this elevates the v3 dynamic-prompt-builder from technical debt to strategic priority.
+- **GTM:** stay free OSS + BYO-keys; if productized, charge for *hosting* (~$15–20/mo), not software. Build
+  direct HEC distribution first; nojobnolife as a later amplifier. Position strictly as a personal job-seeker
+  copilot, never talent-intel. Deprioritize CareerOS to one informational email.
+- **Model facts (corrected):** current generation is **Opus 4.8 / Sonnet 4.6 / Haiku 4.5**. Registry strings
+  are already current — do NOT bulk-upgrade. `text-embedding-3-small` stays.
 
 ---
 
@@ -2041,7 +2110,7 @@ npm run dev
 ### Get a JWT token
 ```powershell
 cd "E:\Claude Projects\Apex\backend"
-echo '{"email":"swapneet.lahoti@gmail.com","password":"Apex2026!"}' > login.json
+echo '{"email":"swapneet.lahoti@gmail.com","password":"<YOUR_PASSWORD>"}' > login.json   # never commit real creds; login.json is .gitignored
 curl.exe -s -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: application/json" --data-binary "@login.json"
 # Copy the access_token from the response
 ```

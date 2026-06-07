@@ -2,8 +2,9 @@
 
 > **This file is the single source of truth for all development on the Apex platform.**
 > Read this before starting any session. Update it when decisions change.
-> Last updated: 2026-04-27 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
+> Last updated: 2026-06-07 | Phase 15: COMPLETE ✅ | Agent prompts: V2 LIVE ✅ | Next: Phase 16 — Action Page Revamp
 > Post-Phase-19: Multi-user self-host distribution (Phases 20–24) — design spec at `docs/superpowers/specs/2026-04-24-multi-user-self-host-design.md`
+> **2026-06-07 Strategic Review complete** — 6-agent review board + synthesis. Master Action List + findings in §16 ("Strategic Review — June 2026"). Two BLOCKERS open (committed credential in PLAN.md; `agent_runs` write is a stub). Model landscape corrected: current generation is **Opus 4.8 / Sonnet 4.6 / Haiku 4.5**; the `budget_tokens` extended-thinking path is deprecated (migrate to adaptive thinking).
 
 ---
 
@@ -639,6 +640,51 @@ git worktree add ../apex-qa-phase2 -b feature/phase2-qa
 | 2026-04-27 | `intended_effect` column added to `actions`; `channel` column added to `outreach_emails` | Both were in CLAUDE.md data model spec but missing from the actual DB. Added via `apply_migrations.py` steps 018 and 019. `channel` defaults to `'EMAIL'`, CHECK constraint `IN ('EMAIL', 'LINKEDIN')`. |
 | 2026-04-27 | Fresh test user recommended for happy-path QA | Existing user (`swapneet.lahoti@gmail.com`) has 1,446 signals, classified data, and existing opportunities — makes it hard to observe a clean first-run flow. Create a separate test account via Supabase Auth dashboard for end-to-end walkthroughs. |
 | 2026-04-27 | Direct commit to master for DB migration fixes (exception to phase-branch rule) | Same rationale as V2 prompt swap: cross-cutting infrastructure fix that unblocks every feature. User explicitly authorised. |
+| 2026-06-07 | Strategic review: model strings already current; do NOT bulk-upgrade | Registry uses `claude-sonnet-4-6` + `claude-haiku-4-5-20251001` — both current. Selective Opus 4.8 pilot for Opportunity Predictor + Career Fit Scorer only (decision-determining agents, ~1 call/company/run), gated behind an A/B and after `agent_runs` writes land. |
+| 2026-06-07 | Migrate extended thinking off `budget_tokens` → adaptive thinking | `base_agent._call_claude` sends `thinking={"type":"enabled","budget_tokens":N}`; deprecated on Sonnet 4.6, 400s on Opus 4.7/4.8. Move to `thinking={"type":"adaptive"}` + `output_config={"effort":"high"}`. Docstring at `base_agent.py:120` ("opus-4-7") is already wrong. |
+| 2026-06-07 | `agent_runs` audit is a logging stub — must be persisted (BLOCKER) | `_log_agent_run` only `logger.info`s ("TODO Phase 2"); never inserts to Supabase. Cost dashboards, SaaS-pivot metering, and EU AI Act decision-audit are all silently empty. Wire the real insert before any other build work. |
+| 2026-06-07 | RLS is NOT enforced on the API hot path — user_id audit required before multi-user (BLOCKER for cohort) | Workers/live services use raw asyncpg over `DATABASE_URL` (Postgres role), which bypasses RLS. "Cohort-ready RLS from day one" is true only if every query manually filters `user_id`. Single-tenant self-host is fine; shared-DB cohort needs an explicit-scoping audit + a cross-user isolation test. |
+| 2026-06-07 | Committed plaintext credential must be rotated + scrubbed (BLOCKER) | `PLAN.md` contained `Apex2026!` in a tracked file; repo is destined to be public OSS. Rotate Supabase password, replace literal with placeholder, scrub git history before going public. |
+| 2026-06-07 | Gmail OAuth scope minimization | `gmail_client.py` requests `gmail.readonly` (a Google *restricted* scope → annual CASA assessment for any verified multi-user app). Only needed for reply detection — drop to `gmail.send` + `gmail.metadata`. Also verify refresh tokens are encrypted at rest. |
+| 2026-06-07 | EU AI Act posture: Apex is NOT high-risk; transparency only | Used by the job-seeker about themselves, not by an employer to screen candidates → outside Annex III employment high-risk. Aug-2026 GPAI obligations fall on model providers (Anthropic/OpenAI), not Apex as downstream deployer. Obligation = Art. 50 transparency: label AI-generated predictions/drafts "verify before sending". Do not over-engineer a high-risk program. |
+| 2026-06-07 | Add `AI_TRANSFORMATION` signal type | The 2026 hiring bifurcation (AI/transformation up, legacy down) is invisible to the current 8 types. Add `AI_TRANSFORMATION` (AI mandates, Chief AI Officer hires, GCC/innovation-hub build-outs) — enum + prompt change, highest value-per-effort strategic move. |
+| 2026-06-07 | Reposition moat around the persona-calibrated reasoning layer | The "3-in-1 (signals + trajectory + outreach)" gap is closing (trackers + sales-intel tools each cover 2 of 3). The defensible asset is MBA-calibrated synthesis with a citation trail — which makes the v3 dynamic-prompt-builder a strategic, not just technical, priority. |
+| 2026-06-07 | PLAN.md Progress Tracker was stale (Phases 14/15 showed "Not Started") | Tracker table contradicted the phase bodies + this file. Corrected to Complete. Root `Index.tsx` is a dead Loveable reference (react-router + mock data), NOT the live app (Next.js `frontend/app/(dashboard)/page.tsx`) — slated to move to `docs/`. |
+
+---
+
+## 16. Strategic Review — June 2026
+
+> 6-agent review board (Strategic / AI-ML / Implementation / Product-UX / Business-GTM / Security) + Synthesis Agent, run 2026-06-07 after a >1-month gap. Conflict-resolution hierarchy applied: **Security → Technical correctness → Cost integrity → Product completeness → Strategy.** Full action backlog lives in PLAN.md ("Strategic Review Action Backlog").
+
+### Master Action List (12 items, priority-ordered)
+
+**🔴 DO THIS WEEK — BLOCKERS (gate all other build work):**
+1. **[P0]** Rotate Supabase password, replace the `Apex2026!` literal in PLAN.md with a placeholder, scrub from git history. *(Agent 6 B1)*
+2. **[P0]** Persist `agent_runs` — implement the real asyncpg insert in `base_agent._log_agent_run`. *(Agents 3+2+6)*
+
+**🟠 DO THIS MONTH:**
+3. **[P1]** Reconcile PLAN.md Progress Tracker (14/15 = Complete) + relocate/delete root `Index.tsx`. *(Agent 3)*
+4. **[P1]** Phase 18 — entity disambiguation (domain-qualified queries + `CompanyContextMatcher`); highest precision win, zero model cost. *(Agents 1+2)*
+5. **[P1]** Migrate extended thinking `budget_tokens` → `thinking:{type:"adaptive"}` + `effort`. *(Agent 2)*
+6. **[P1]** Phase 16 — Action page revamp (consume `intended_effect`, company filter, opp+signal JOINs; make enriched card the dashboard hero — "actions not lists"). *(Agents 3+4)*
+7. **[P1]** Minimize Gmail OAuth scope (drop `gmail.readonly`); verify refresh-token encryption. *(Agent 6 H1/H2)*
+8. **[P2]** Phase 17B — Target Companies (+ "Find Similar") **and** add `AI_TRANSFORMATION` signal type. *(Agents 1+4)*
+
+**🟢 DO NEXT QUARTER:**
+9. **[P2]** Phase 20+22 — multi-user readiness: audit every asyncpg query for explicit `user_id` scoping + add cross-user isolation test, then setup wizard. *(Agent 6 B2)*
+10. **[P3]** Pilot Opus 4.8 (`effort:"high"`) on Opportunity Predictor + Career Fit Scorer; A/B vs Sonnet 4.6 on the existing corpus. *(Agent 2)*
+11. **[P3]** One-click "Approve & Send" warm outreach from the opportunity (auto-select cover-letter narrative) + AI-generated disclosure on drafts/predictions. *(Agent 4 + Agent 6 M1)*
+12. **[P3]** Privacy policy + GDPR deletion path + contact-enrichment legal basis; pull PII-log-redaction forward from v1.5. *(Agent 6 M2 + Agent 5)*
+
+### Key findings by lens
+
+- **Strategic (A1):** Moat narrowing — reposition around persona-calibrated reasoning. Signal taxonomy missing `AI_TRANSFORMATION`. For HEC '27 (12-mo window), weight FUNDING + EXEC_HIRE + AI_TRANSFORMATION as Tier 1; demote EARNINGS to context. No existential pipeline risk (you use **no** LinkedIn cookies — copy/paste only). New bet now viable: 1M-context "company dossier" pass for target companies.
+- **AI/ML (A2):** Model strings current. Real gaps: deprecated `budget_tokens` path; `agent_runs` not persisted; no circuit-breaker/529-fallback. `text-embedding-3-small` stays. Precision is bounded by entity disambiguation (Phase 18), not the model.
+- **Implementation (A3):** BLOCKERS = committed password + `agent_runs` stub. PLAN tracker was self-contradictory. DB schema (`intended_effect`, `channel`) is ahead of the Phase 16/17 features that consume it. Root `Index.tsx` is a stale reference. Next 3 sessions: (1) BLOCKERs, (2) Phase 18, (3) Phase 16.
+- **Product/UX (A4):** "Actions not lists" 2/5 (dashboard shows parallel lists). Onboarding 4/5 (Phase 15 is a real win). Confidence comms 4/5. Highest friction: contact discovery + Gmail OAuth. 10x feature: one-click approve-and-send.
+- **Business/GTM (A5):** Stay free OSS + BYO-keys; if productized, charge for *hosting* (~$15–20/mo), not software. Build direct HEC distribution first; nojobnolife as later amplifier. Position strictly as a personal job-seeker copilot (never talent-intel). Deprioritize CareerOS to one informational email.
+- **Security (A6):** BLOCKERS — committed credential; RLS bypassed on direct-DB path (multi-user gate). HIGH — `gmail.readonly` over-broad (CASA); verify token encryption. MEDIUM — EU AI Act = transparency only (not high-risk); GDPR work before cohort. Secrets otherwise clean (`config.py` env-driven, no hardcoded keys).
 
 ---
 
